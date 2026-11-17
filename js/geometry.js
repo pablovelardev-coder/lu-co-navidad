@@ -63,7 +63,7 @@ function perfil(id, S) {
 }
 
 /* ---------- nombre: contornos de la letra → formas con huecos ---------- */
-function formasTexto(font, texto, size) {
+function contornosTexto(font, texto, size) {
   const path = font.getPath(texto, 0, 0, size);
   const contornos = []; let cur = null;
   for (const c of path.commands) {
@@ -72,7 +72,29 @@ function formasTexto(font, texto, size) {
     else if (c.type === 'Q') cur.quadraticCurveTo(c.x1, -c.y1, c.x, -c.y);
     else if (c.type === 'C') cur.bezierCurveTo(c.x1, -c.y1, c.x2, -c.y2, c.x, -c.y);
   }
-  const pts = contornos.map(p => limpia(p.getPoints(6))).filter(p => p.length >= 3 && area(p) > 0.01);
+  return contornos.map(p => limpia(p.getPoints(6))).filter(p => p.length >= 3 && area(p) > 0.01);
+}
+
+// Engrosar el nombre: une los trazos que se enciman (cursiva) y expande el contorno 'extra' mm.
+// Tanda de prueba 16-nov: con la letra elegante los trazos salían huecos (doble línea).
+const ENGROSAR = { elegante: 0.25, redondita: 0 };
+let clipperP = null;
+const cargarClipper = () => clipperP ||= import('https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/+esm').then(m => m.default || m);
+async function formasTextoGruesas(font, texto, size, extra) {
+  const C = await cargarClipper(), S = 1000;
+  const paths = contornosTexto(font, texto, size).map(p => p.map(v => ({ X: Math.round(v.x * S), Y: Math.round(v.y * S) })));
+  const union = new C.Paths(), cl = new C.Clipper();
+  cl.AddPaths(paths, C.PolyType.ptSubject, true);
+  cl.Execute(C.ClipType.ctUnion, union, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+  const off = new C.ClipperOffset(2, 0.02 * S), arbol = new C.PolyTree();
+  off.AddPaths(union, C.JoinType.jtRound, C.EndType.etClosedPolygon);
+  off.Execute(arbol, extra * S);
+  const aV = p => p.map(q => V(q.X / S, q.Y / S));
+  return C.JS.PolyTreeToExPolygons(arbol).filter(e => e.outer.length >= 3).map(e => forma(aV(e.outer), e.holes.filter(h => h.length >= 3).map(aV)));
+}
+
+function formasTexto(font, texto, size) {
+  const pts = contornosTexto(font, texto, size);
   // Un contorno es hueco si queda COMPLETO dentro de otro (en letras cursivas los trazos se enciman sin ser huecos).
   const contiene = (big, small) => {
     if (area(big) <= area(small)) return false;
@@ -94,7 +116,7 @@ function formasTexto(font, texto, size) {
 
 /* ---------- adornos ---------- */
 function adorno(tipo, x, y, k) {
-  if (tipo === 'perlitas') return [forma(circulo(x, y, 1.2 * k, 16))];
+  if (tipo === 'perlitas') return [forma(circulo(x, y, 1.6 * k, 20))]; // 3.2 mm: a 2.4 mm salían como anillitos
   if (tipo === 'estrellas') return [forma(estrella(x, y, 2.5 * k, 1.1 * k))];
   if (tipo === 'corazones') return [forma(corazon(x, y, 5 * k))];
   if (tipo === 'copos') return [0, 60, 120].map(g => {
@@ -139,7 +161,9 @@ export async function construir(d) {
       const size = 10 * Math.min(pf.maxW / w, pf.maxH / h);
       const bb = font.getPath(texto, 0, 0, size).getBoundingBox();
       const dx = -(bb.x1 + bb.x2) / 2, dy = pf.textoY + (bb.y1 + bb.y2) / 2;
-      const formas = formasTexto(font, texto, size);
+      let formas;
+      try { formas = await formasTextoGruesas(font, texto, size, ENGROSAR[d.letra] ?? 0); }
+      catch (e) { console.warn('Sin engrosar el nombre:', e); formas = formasTexto(font, texto, size); }
       if (formas.length) grupo.add(new THREE.Mesh(extruir(formas, ALTO_LETRA, GROSOR - 0.1, dx, dy)));
       caja = { x: 0, y: pf.textoY, w: bb.x2 - bb.x1, h: bb.y2 - bb.y1 };
       if (caja.h < LETRA_CHICA * pf.k) avisos.push('El nombre queda chiquito para esta forma. Prueben uno más corto o la esfera plana.');
