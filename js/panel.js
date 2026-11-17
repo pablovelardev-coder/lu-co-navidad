@@ -142,7 +142,25 @@ export async function vPanel(ctx) {
   function tandas(box) {
     const ts = porImprimir();
     box.innerHTML = `
-      <p class="hint">Cada tanda es de un solo color y lleva hasta 4 esferas en cuadro de 2 × 2. Descarga el archivo, ábrelo en la app X-MAKER con "Importar archivo" y, cuando termine, márcala como impresa. En iPad el archivo queda en Archivos → Descargas.</p>
+      <details class="card guia">
+        <summary><b>Cómo imprimir una tanda</b></summary>
+        <ol>
+          <li><b>Descarga la tanda</b> con el botón de abajo. En el iPad queda en Archivos → Descargas.</li>
+          <li>En la app <b>X-MAKER</b>, importa el archivo y revisa que se vean todas las piezas acostadas.</li>
+          <li>Toca <b>Slice</b> y entra a los ajustes avanzados:
+            <ul>
+              <li><b>Relleno (Infill): 10%</b></li>
+              <li><b>Orilla (Brim): apagada</b>. Una línea alrededor (Skirt) sí puede quedarse.</li>
+              <li><b>Soportes (Supports): apagados</b></li>
+            </ul>
+          </li>
+          <li>Pon el rollo del <b>color de la tanda</b> e imprime.</li>
+          <li>Mira las primeras capas: si una punta se levanta, cancela y vuelve a poner la orilla.</li>
+          <li>Al terminar, toca <b>Ya se imprimió</b>. La app pasa los pedidos a "Listo" y descuenta el filamento.</li>
+          <li><b>Adornos 3D:</b> pega cada figura espalda con espalda, con un palillo en el hoyo para alinear las mitades. El pegamento instantáneo lo pone un adulto.</li>
+        </ol>
+        <p class="hint">Si pesas las piezas o la merma, anótalo en el pedido (campo Merma). Los nombres de los menús pueden variar un poco en la app del iPad.</p>
+      </details>
       ${ts.length ? '' : '<p class="hint">No hay esferas pagadas esperando impresora.</p>'}
       <div class="card row" style="justify-content:space-between"><span><b>Ganchos impresos</b><br><small class="hint">15 ganchos en S por tanda, para colgar las esferas</small></span><button class="btn small soft" id="bajarGanchos">Descargar tanda de ganchos</button></div>
       ${ts.map((t, i) => `
