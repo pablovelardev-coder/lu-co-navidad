@@ -2,6 +2,7 @@
 import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
 import { lugaresDe } from './pricing.js';
 import { correoRecordado } from './store.js';
+import { CONFIG } from './config.js';
 
 const fmt = n => '$' + Math.round(n || 0).toLocaleString('es-MX');
 const hoy = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
@@ -51,6 +52,67 @@ function festejar(nuevos, alVer) {
   try { navigator.vibrate && navigator.vibrate([120, 60, 120, 60, 240]); } catch (e) { /* sin vibrar */ }
   try { if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Lu & Co. 🎉 ' + titulo, { body: `${detalle}. ${porra}` }); } catch (e) { /* sin aviso del sistema */ }
 }
+/* ----- Avisos con la app cerrada (Web Push) ----- */
+const pushSoportado = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const esIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const enPantallaInicio = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const llaveBytes = b64 => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)), c => c.charCodeAt(0));
+const nombreAparato = () => (esIOS() ? (/iPad|Macintosh/.test(navigator.userAgent) ? 'iPad' : 'iPhone') : /Android/.test(navigator.userAgent) ? 'Android' : 'Computadora');
+async function suscripcionActual() {
+  if (!pushSoportado()) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+async function pintaAvisos(box, store, toast) {
+  if (!box) return;
+  if (!pushSoportado()) {
+    box.innerHTML = esIOS() && !enPantallaInicio()
+      ? `<details class="card guia"><summary><b>🔔 Que me avise aunque la app esté cerrada</b></summary><ol>
+          <li>En Safari toca <b>Compartir</b> (el cuadrito con la flecha ⬆️).</li>
+          <li>Escoge <b>Agregar a pantalla de inicio</b> y toca <b>Agregar</b>.</li>
+          <li>Abre <b>Lu &amp; Co.</b> desde el nuevo ícono, entra al <b>Panel de Lu</b> y toca <b>Activar avisos</b>.</li>
+        </ol><p class="hint">El iPad solo deja mandar avisos a las apps que están en la pantalla de inicio.</p></details>`
+      : '';
+    return;
+  }
+  const sub = await suscripcionActual().catch(() => null);
+  if (Notification.permission === 'denied') {
+    box.innerHTML = '<p class="warn">Los avisos están bloqueados. Actívalos en Ajustes → Notificaciones → Lu &amp; Co.</p>';
+    return;
+  }
+  box.innerHTML = sub
+    ? `<div class="card row" style="justify-content:space-between"><span><b>🔔 Avisos activados</b><br><small class="hint">Te llega un aviso en este aparato con cada pedido nuevo</small></span><span class="row" style="gap:6px"><button class="btn small soft" id="probarAviso">Probar</button><button class="linkbtn" id="quitarAviso">Quitar</button></span></div>`
+    : `<button class="btn gold" id="activarAviso">🔔 Activar avisos de pedidos nuevos</button>`;
+  const act = box.querySelector('#activarAviso');
+  if (act) act.onclick = async () => {
+    act.disabled = true; act.textContent = 'Activando…';
+    try {
+      if ((await Notification.requestPermission()) !== 'granted') throw new Error('No se dio permiso para avisos');
+      const reg = await navigator.serviceWorker.ready;
+      const nueva = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: llaveBytes(CONFIG.vapidPublica) });
+      await store.guardarAviso(nueva, nombreAparato());
+      toast('¡Listo! Te voy a avisar de cada pedido');
+    } catch (e) { console.error(e); toast('No se activó: ' + e.message); }
+    pintaAvisos(box, store, toast);
+  };
+  const pro = box.querySelector('#probarAviso');
+  if (pro) pro.onclick = async () => {
+    pro.disabled = true;
+    try {
+      // Por si se borró en el servidor, se vuelve a guardar antes de probar
+      await store.guardarAviso(sub, nombreAparato());
+      const r = await store.probarAviso();
+      toast(r && r.entregados ? 'Aviso enviado. Debe llegar en unos segundos' : 'No se pudo entregar el aviso');
+    } catch (e) { toast('No se mandó: ' + e.message); }
+    pro.disabled = false;
+  };
+  const qui = box.querySelector('#quitarAviso');
+  if (qui) qui.onclick = async () => {
+    try { await store.borrarAviso(sub.endpoint); await sub.unsubscribe(); toast('Avisos quitados en este aparato'); } catch (e) { toast('No se quitó: ' + e.message); }
+    pintaAvisos(box, store, toast);
+  };
+}
+
 const VISTO = 'luco-panel-visto';
 function leerVisto() { try { return localStorage.getItem(VISTO); } catch (e) { return null; } }
 function marcarVisto(iso) { try { if (iso && (!leerVisto() || iso > leerVisto())) localStorage.setItem(VISTO, iso); } catch (e) { /* sin almacenamiento */ } }
@@ -79,13 +141,12 @@ export async function vPanel(ctx) {
   const pinta = () => {
     view.innerHTML = `
       <div class="bar"><h2>Hola, Lu</h2><button class="linkbtn" id="salir">Salir</button></div>
-      ${'Notification' in window && Notification.permission === 'default' ? '<button class="btn small soft" id="avisos">🔔 Avisarme cuando llegue un pedido</button>' : ''}
+      <div id="avisosBox"></div>
       <div class="ptabs" role="tablist">${[['resumen', 'Resumen'], ['pedidos', 'Pedidos'], ['tandas', 'Tandas'], ['filamento', 'Filamento']].map(([id, t]) => `<button class="chip" role="tab" data-t="${id}" aria-pressed="${id === pestana}">${t}</button>`).join('')}</div>
       <div id="ptab" style="display:grid;gap:14px"></div>`;
     view.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { pestana = b.dataset.t; pinta(); });
     view.querySelector('#salir').onclick = async () => { if (quitarAviso) { quitarAviso(); quitarAviso = null; } await store.logout(); vPanel(ctx); };
-    const av = view.querySelector('#avisos');
-    if (av) av.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { /* no se pudo */ } pinta(); };
+    if (pestana === 'resumen') pintaAvisos(view.querySelector('#avisosBox'), store, toast);
     const box = view.querySelector('#ptab');
     ({ resumen, pedidos: tabPedidos, tandas, filamento })[pestana](box);
   };

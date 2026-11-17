@@ -1,0 +1,16 @@
+{
+  "name": "Lu & Co. Navidad",
+  "short_name": "Lu & Co.",
+  "description": "Adornos navideños con nombre, diseñados por ti e impresos en 3D por Luciana.",
+  "lang": "es-MX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F8F2EE",
+  "theme_color": "#7A1E3A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

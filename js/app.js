@@ -340,6 +340,8 @@ async function cargarAjustes() {
   return ajustes;
 }
 (async () => {
+  // Service worker: solo para recibir los avisos de pedidos nuevos en el panel
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(e => console.warn('sin service worker', e));
   $('#demoBanner').hidden = store.modo !== 'prueba';
   await cargarAjustes();
   contador();

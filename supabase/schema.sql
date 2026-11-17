@@ -111,3 +111,23 @@ do $$ begin
     alter publication supabase_realtime add table public.orders;
   end if;
 end $$;
+
+-- Avisos con la app cerrada (Web Push, 17-nov). Función: supabase/functions/aviso-pedido (sin librerías).
+create table if not exists public.push_subs (
+  endpoint text primary key, p256dh text not null, auth text not null,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  device text, created_at timestamptz not null default now()
+);
+alter table public.push_subs enable row level security;
+create policy push_subs_insert on public.push_subs for insert to authenticated with check (public.is_admin() and user_id = auth.uid());
+create policy push_subs_update on public.push_subs for update to authenticated using (user_id = auth.uid()) with check (public.is_admin() and user_id = auth.uid());
+create policy push_subs_select on public.push_subs for select to authenticated using (user_id = auth.uid());
+create policy push_subs_delete on public.push_subs for delete to authenticated using (user_id = auth.uid());
+revoke all on public.push_subs from anon;
+-- Llaves VAPID (la fila se inserta a mano; la privada no va en el repo)
+create table if not exists public.push_config (id int primary key default 1 check (id = 1), x text not null, y text not null, d text not null, publica text not null, sub text not null);
+alter table public.push_config enable row level security;
+revoke all on public.push_config from anon, authenticated;
+alter table public.orders add column if not exists notified_at timestamptz;
+create extension if not exists pg_net with schema extensions;
+-- avisar_pedido(): net.http_post a /functions/v1/aviso-pedido con {id} y la llave anon; trigger orders_aviso after insert.

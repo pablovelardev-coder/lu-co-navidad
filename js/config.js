@@ -15,6 +15,9 @@ export const CONFIG = {
   // 0 diseñar · 1 hacer la app · 2 vender · 3 producir y costos · 4 inventario · 5 programa de producción · 6 cobranza
   etapa: 2,
 
+  // Llave pública de los avisos (Web Push). La privada vive solo en Supabase (tabla push_config).
+  vapidPublica: 'BLNnRphIeLY9LyNIoIX4LSsZ35IwtxxwEpWfrE8K33xzF-SS37ndMvAsnzc1Zk5gAA1Qd1fV4sipNsPAlelRmAA',
+
   // PIN del panel en modo prueba (con Supabase se entra con correo y contraseña)
   demoPin: '2512',
 
