@@ -1,7 +1,7 @@
 // Lu & Co. Navidad — pantallas del cliente: inicio, diseñar, mi pedido y seguimiento.
 import { store } from './store.js';
 import { CONFIG } from './config.js';
-import { COLORES, FORMAS, ADORNOS, LETRAS, PAGOS, PASOS_CLIENTE, MAX_LETRAS, colorDe, formaDe, nombrePieza, ornSVG, esc, ARCOIRIS_CSS } from './catalog.js';
+import { COLORES, FORMAS, CATEGORIAS, ADORNOS, LETRAS, PAGOS, PASOS_CLIENTE, MAX_LETRAS, colorDe, formaDe, es3dForma, nombrePieza, ornSVG, esc, ARCOIRIS_CSS } from './catalog.js';
 import { PRECIOS_BASE, cotizar, escalera, precioUnitario } from './pricing.js';
 
 const $ = s => document.querySelector(s);
@@ -19,7 +19,8 @@ const carrito = { get: () => leer('luco-carrito', []), set: v => { guardar('luco
 function contador() { $('#cartCount').textContent = carrito.get().reduce((s, i) => s + i.cant, 0); }
 function disponible(id) { const r = ajustes.inventario.find(x => x.color === id); return !r || (r.available && r.grams_left >= ajustes.precios.gramos); }
 const nombreItem = it => nombrePieza(it.forma, it.color);
-const detalleItem = it => `"${esc(it.nombre)}" · ${ADORNOS.find(a => a.id === it.adorno)?.nombre.toLowerCase() || 'lisa'} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}`;
+const detalleItem = it => `"${esc(it.nombre)}" · ${es3dForma(it.forma) ? '3D, dos mitades' : (ADORNOS.find(a => a.id === it.adorno)?.nombre.toLowerCase() || 'lisa')} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}`;
+const venta3d = () => !!CONFIG.venta3d;
 
 /* ---------- rutas ---------- */
 async function ruta() {
@@ -37,26 +38,30 @@ async function ruta() {
 }
 
 /* ---------- inicio ---------- */
-const MUESTRA = { plana: ['rojo', 'Ana'], estrella: ['amarillo', 'Leo'], corazon: ['morado', 'Mía'], arbol: ['verde', 'Pau'], redonda: ['azul', 'Sofi'] };
+const MUESTRA = { plana: ['rojo', 'Ana'], estrella: ['amarillo', 'Leo'], corazon: ['morado', 'Mía'], arbol: ['verde', 'Pau'],
+  esfera3d: ['azul', 'Sofi'], estrella3d: ['amarillo', 'Lu'], corazon3d: ['rojo', 'Mía'], arbol3d: ['verde', 'Pau'], muneco: ['blanco', 'Leo'], bota: ['rojo', 'Ana'], gorro: ['rojo', 'Lu'] };
+let catInicio = 'nombre';
 function vInicio() {
-  const p = ajustes.precios;
+  const p = ajustes.precios, en3d = catInicio === '3d';
   view.innerHTML = `
-    <p class="hello">¿Qué esfera vas a diseñar hoy?</p>
-    <div class="cat">${FORMAS.map(f => {
+    <p class="hello">¿Qué vas a diseñar hoy?</p>
+    <div class="tabs" role="tablist" style="grid-template-columns:1fr 1fr">${CATEGORIAS.map(c => `<button role="tab" data-cat="${c.id}" aria-selected="${c.id === catInicio}">${c.nombre}</button>`).join('')}</div>
+    ${en3d ? `<p class="sub">Redondos de los dos lados: se imprimen en dos mitades y se pegan.${venta3d() ? '' : ' <b>Muy pronto:</b> ya los puedes diseñar y los estamos probando.'}</p>` : ''}
+    <div class="cat">${FORMAS.filter(f => f.cat === catInicio).map(f => {
       const [color, nombre] = MUESTRA[f.id];
-      const svg = ornSVG({ forma: f.id, color, nombre, letra: 'elegante' }, f.pronto ? 70 : 88);
-      return f.pronto
-        ? `<div class="pcard wide off">${svg}<div><span class="badge">Muy pronto</span><br><b>${f.nombre}</b><br><span>${f.nota}</span></div></div>`
-        : `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>desde ${fmt(p.p4)} cada una</span></a>`;
+      const svg = ornSVG({ forma: f.id, color, nombre, letra: 'elegante' }, 88);
+      const precio = f.cat === '3d' ? (venta3d() ? `desde ${fmt(2 * p.p4)} cada una` : 'Muy pronto') : `desde ${fmt(p.p4)} cada una`;
+      return `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>${precio}</span></a>`;
     }).join('')}</div>
     <div class="steps"><div><i>1</i>Diseña</div><div><i>2</i>Pide</div><div><i>3</i>Recibe</div></div>
-    <div class="card" style="display:grid;gap:10px">
+    ${en3d ? '' : `<div class="card" style="display:grid;gap:10px">
       <p class="lbl">Precio de cada esfera</p>
       <div class="ladder">${escalera(p).map(e => `<div class="${e.n === 4 ? 'best' : ''}"><b>${fmt(e.cu)}</b>cada una<br>${e.n === 4 ? 'si pides 4 o más' : e.n === 1 ? 'si pides 1' : `si pides ${e.n}`}</div>`).join('')}</div>
       <p class="hint">El precio es por esfera y baja cuando pides varias del mismo color, porque la impresora hace 4 a la vez de un solo color.</p>
-    </div>
+    </div>`}
     <a class="btn soft" href="#seguimiento">¿Cómo va mi pedido?</a>
     <a class="btn gold" href="#compartir">Comparte Lu &amp; Co. con tus amigas</a>`;
+  view.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { catInicio = b.dataset.cat; vInicio(); });
 }
 
 /* ---------- compartir: QR y mensaje ---------- */
@@ -107,18 +112,30 @@ let borrador = leer('luco-borrador', { forma: 'plana', color: 'rojo', nombre: ''
 let pestana = 1;
 async function vDisenar(formaId) {
   const st = borrador;
-  if (formaId && FORMAS.some(f => f.id === formaId && !f.pronto)) st.forma = formaId;
+  if (formaId && FORMAS.some(f => f.id === formaId)) st.forma = formaId;
+  if (!FORMAS.some(f => f.id === st.forma)) st.forma = 'plana';
   if (!disponible(st.color)) st.color = (COLORES.find(c => disponible(c.id)) || COLORES[0]).id;
   const p = ajustes.precios;
+  catInicio = formaDe(st.forma).cat;
   view.innerHTML = `
     <div class="bar"><a class="back" href="#inicio" aria-label="Regresar">‹</a><h2 id="ttl"></h2></div>
     <div class="stage"><canvas id="c3d" role="img" aria-label="Tu esfera en 3D"></canvas><p class="loading" id="loading">Preparando tu esfera…</p></div>
     <p class="warn" id="aviso" hidden></p>
     <div class="tabs" role="tablist">${['Forma', 'Color', 'Nombre', 'Adorno'].map((t, i) => `<button role="tab" data-tab="${i}" aria-selected="${i === pestana}">${t}</button>`).join('')}</div>
     <div id="panelTab" style="display:grid;gap:12px"></div>
-    <div class="card" style="display:grid;gap:4px"><div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p></div>
+    <div class="card" id="precioCard" style="display:grid;gap:4px"></div>
     <button class="btn" id="agregar">Agregar a mi pedido</button>`;
-  const titulo = () => { $('#ttl').textContent = 'Diseña tu ' + formaDe(st.forma).nombre.toLowerCase(); };
+  const titulo = () => {
+    $('#ttl').textContent = 'Diseña tu ' + formaDe(st.forma).nombre.toLowerCase();
+    const d3 = es3dForma(st.forma), puede = !d3 || venta3d();
+    $('#precioCard').innerHTML = !d3
+      ? `<div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p>`
+      : puede
+        ? `<div class="price"><span>Precio por figura</span><b>${fmt(2 * precioUnitario(2, p))}</b></div><p class="hint">Se imprime en dos mitades. Si pides 2 del mismo color, cada una cuesta ${fmt(2 * p.p4)}.</p>`
+        : `<div class="price"><span>Adornos 3D</span><b>Muy pronto</b></div><p class="hint">Ya la puedes diseñar. Estamos haciendo las primeras para ponerles precio.</p>`;
+    $('#agregar').disabled = !puede;
+    $('#agregar').textContent = puede ? 'Agregar a mi pedido' : 'Muy pronto';
+  };
   titulo();
   view.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { pestana = +b.dataset.tab; view.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-selected', x === b)); pintaPestana(); });
 
@@ -141,7 +158,7 @@ async function vDisenar(formaId) {
   function pintaPestana() {
     const box = $('#panelTab');
     if (pestana === 0) {
-      box.innerHTML = `<div class="chips">${FORMAS.map(f => `<button class="chip" data-f="${f.id}" aria-pressed="${f.id === st.forma}" ${f.pronto ? 'disabled' : ''}>${f.nombre}${f.pronto ? ' · pronto' : ''}</button>`).join('')}</div>`;
+      box.innerHTML = `<div class="chips">${FORMAS.filter(f => f.cat === formaDe(st.forma).cat).map(f => `<button class="chip" data-f="${f.id}" aria-pressed="${f.id === st.forma}">${f.nombre}</button>`).join('')}</div>`;
       box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { st.forma = b.dataset.f; box.querySelectorAll('[data-f]').forEach(x => x.setAttribute('aria-pressed', x === b)); titulo(); redibuja(); });
     } else if (pestana === 1) {
       box.innerHTML = `<div class="sws">${COLORES.map(c => { const ok = disponible(c.id); return `<button class="sw" data-c="${c.id}" aria-pressed="${c.id === st.color}" ${ok ? '' : 'disabled'} aria-label="${c.nombre}${ok ? '' : ', agotado'}"><i style="background:${c.hex || ARCOIRIS_CSS}"></i>${ok ? c.nombre : 'Agotado'}</button>`; }).join('')}</div>`;
@@ -153,6 +170,8 @@ async function vDisenar(formaId) {
       const inp = $('#nombre'), cuenta = () => { $('#cuenta').textContent = `${inp.value.length} de ${MAX_LETRAS} letras`; };
       cuenta(); inp.oninput = () => { st.nombre = inp.value; cuenta(); redibuja(); };
       box.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { st.letra = b.dataset.l; box.querySelectorAll('[data-l]').forEach(x => x.setAttribute('aria-pressed', x === b)); redibuja(); });
+    } else if (es3dForma(st.forma)) {
+      box.innerHTML = '<p class="hint">Los adornos 3D ya traen sus propios detalles, como la cara del muñeco. El nombre va en las dos caras.</p>';
     } else {
       box.innerHTML = `<div class="chips">${ADORNOS.map(a => `<button class="chip" data-a="${a.id}" aria-pressed="${a.id === st.adorno}">${a.nombre}</button>`).join('')}</div>`;
       box.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { st.adorno = b.dataset.a; box.querySelectorAll('[data-a]').forEach(x => x.setAttribute('aria-pressed', x === b)); redibuja(); });
@@ -160,6 +179,7 @@ async function vDisenar(formaId) {
   }
   pintaPestana();
   $('#agregar').onclick = () => {
+    if (es3dForma(st.forma) && !venta3d()) { toast('Los adornos 3D salen muy pronto'); return; }
     if (!st.nombre.trim()) { pestana = 2; view.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-selected', +x.dataset.tab === 2)); pintaPestana(); $('#nombre').focus(); toast('Escribe el nombre de la esfera'); return; }
     carrito.set([...carrito.get(), { id: crypto.randomUUID(), forma: st.forma, color: st.color, nombre: st.nombre.trim(), adorno: st.adorno, letra: st.letra, cant: 1 }]);
     toast('¡Lista! Ya está en tu pedido');

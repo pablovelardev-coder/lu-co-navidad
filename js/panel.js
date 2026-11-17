@@ -116,11 +116,15 @@ export async function vPanel(ctx) {
 
   /* ----- Tandas ----- */
   // Una unidad = un lugar en la cama. Solo esferas pagadas que faltan por imprimir.
+  // Las 3D se imprimen en 2 mitades: cada mitad es una unidad (frente y espalda) e 'impresas' cuenta mitades.
   function unidades(lista) {
     const out = [];
     for (const o of lista) (o.items || []).forEach((it, idx) => {
-      const faltan = it.cant - (it.impresas || 0);
-      for (let k = 0; k < faltan; k++) out.push({ o, idx, it, lugares: lugaresDe(it) });
+      const mitades = lugaresDe(it), hechas = it.impresas || 0, faltan = it.cant * mitades - hechas;
+      for (let k = 0; k < faltan; k++) {
+        const lado = mitades === 2 ? ((hechas + k) % 2 === 0 ? 'frente' : 'espalda') : 'frente';
+        out.push({ o, idx, it, lado, pieza: { d: it, lado } });
+      }
     });
     return out;
   }
@@ -140,6 +144,7 @@ export async function vPanel(ctx) {
     box.innerHTML = `
       <p class="hint">Cada tanda es de un solo color y lleva hasta 4 esferas en cuadro de 2 × 2. Descarga el archivo, ábrelo en la app X-MAKER con "Importar archivo" y, cuando termine, márcala como impresa. En iPad el archivo queda en Archivos → Descargas.</p>
       ${ts.length ? '' : '<p class="hint">No hay esferas pagadas esperando impresora.</p>'}
+      <div class="card row" style="justify-content:space-between"><span><b>Ganchos impresos</b><br><small class="hint">15 ganchos en S por tanda, para colgar las esferas</small></span><button class="btn small soft" id="bajarGanchos">Descargar tanda de ganchos</button></div>
       ${ts.map((t, i) => `
         <div class="card tanda" data-i="${i}">
           <div class="ordhead"><b>${colorDe(t.color).nombre} · ${t.us.length} de 4</b><span class="st ${t.us.length === 4 ? 'Listo' : ''}">${t.us.length === 4 ? 'Llena' : 'Faltan ' + (4 - t.us.length)}</span></div>
@@ -147,6 +152,11 @@ export async function vPanel(ctx) {
           <p class="hint">${[...new Set(t.us.map(u => u.o.code))].map(esc).join(', ')}${t.us.length < 4 ? ' · Pueden esperar otro pedido de este color o imprimirla así.' : ''}</p>
           <div class="row"><button class="btn small" data-bajar>Descargar tanda (STL)</button><button class="btn small soft" data-lista>Ya se imprimió</button></div>
         </div>`).join('')}`;
+    box.querySelector('#bajarGanchos').onclick = async () => {
+      toast('Preparando los ganchos…');
+      try { const geo = await import('./geometry.js'); geo.descargar(await geo.ganchosSTL(15), `ganchos-${hoy()}.stl`); }
+      catch (e) { toast('No se pudo crear el archivo: ' + e.message); }
+    };
     box.querySelectorAll('.tanda').forEach(card => {
       const t = ts[+card.dataset.i];
       card.querySelector('[data-bajar]').onclick = () => bajar(t.us, `tanda-${t.color}-${hoy()}`);
@@ -160,7 +170,7 @@ export async function vPanel(ctx) {
     const g = ajustes.precios.gramos, porPedido = new Map();
     for (const u of t.us) { const m = porPedido.get(u.o.id) || { o: u.o, items: u.o.items.map(i => ({ ...i })), n: 0 }; m.items[u.idx].impresas = (m.items[u.idx].impresas || 0) + 1; m.n++; porPedido.set(u.o.id, m); }
     for (const { o, items, n } of porPedido.values()) {
-      const todo = items.every(i => (i.impresas || 0) >= i.cant), status = todo ? 'Listo' : 'Imprimiendo';
+      const todo = items.every(i => (i.impresas || 0) >= i.cant * lugaresDe(i)), status = todo ? 'Listo' : 'Imprimiendo';
       const sd = { ...(o.status_dates || {}) }; if (!sd.Imprimiendo) sd.Imprimiendo = hoy(); if (todo && !sd.Listo) sd.Listo = hoy();
       await store.updateOrder(o.id, { items, status, status_dates: sd, grams: (+o.grams || 0) + n * g });
     }
@@ -173,7 +183,7 @@ export async function vPanel(ctx) {
     try {
       const geo = await import('./geometry.js');
       for (let i = 0; i < us.length; i += 4) {
-        const blob = await geo.stlDe(us.slice(i, i + 4).map(u => u.it));
+        const blob = await geo.stlDe(us.slice(i, i + 4).map(u => u.pieza));
         geo.descargar(blob, `${nombre}${us.length > 4 ? '-' + (i / 4 + 1) : ''}.stl`);
       }
     } catch (e) { console.error(e); toast('No se pudo crear el archivo: ' + e.message); }

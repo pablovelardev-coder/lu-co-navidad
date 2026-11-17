@@ -140,6 +140,133 @@ function lugaresAdorno(pf, cajaTexto) {
   return out;
 }
 
+/* ---------- adornos 3D: abombados de un lado, espalda plana, 1 pieza ---------- */
+// Decisión de Luciana (17-nov): primero muñeco de nieve, bota y gorro de Santa, más las 4 clásicas en 3D.
+// El abombado se arma con capas encogidas (como lo imprime la impresora, capa por capa).
+const BASE_3D = 1.2, DOMO = 3.6, R_DOMO = 3.5, CAPAS = 12, ALTO_LETRA_3D = 1.0, ALTO_DETALLE_3D = 0.8;
+const rect = (x0, y0, x1, y1) => [V(x0, y0), V(x1, y0), V(x1, y1), V(x0, y1)];
+const PINO = [[0, 29], [26.5, -23], [5, -23], [5, -26.5], [-5, -26.5], [-5, -23], [-26.5, -23]].map(([x, y]) => V(x, y));
+// Medidas en mm para 55 mm. texto = zona plana de arriba donde va el nombre.
+const SILUETAS_3D = {
+  esfera3d: () => ({ partes: [circulo(0, 0, 27.5, 96)], hoyo: V(0, 21), texto: { y: -1, w: 40, h: 12 } }),
+  estrella3d: () => ({ partes: [estrella(0, 0, 29, 13.5)], hoyo: V(0, 17.5), texto: { y: -2, w: 17, h: 7 } }),
+  corazon3d: () => ({ partes: [corazon(0, 0, 55)], hoyo: V(0, 7.5), texto: { y: -5, w: 28, h: 9 } }),
+  arbol3d: () => ({ partes: [PINO], hoyo: V(0, 17), texto: { y: -11, w: 24, h: 8 } }),
+  muneco: () => ({
+    partes: [circulo(0, -11, 15, 64), circulo(0, 11.5, 10.5, 64), rect(-11, 19.5, 11, 22.5), rect(-7, 22, 7, 30)],
+    hoyo: V(0, 26), texto: { y: -11.5, w: 20, h: 8 },
+    detalles: [circulo(-3.5, 13.5, 1.15, 14), circulo(3.5, 13.5, 1.15, 14), [V(-0.8, 10.6), V(6.5, 9.4), V(-0.8, 8.2)]],
+  }),
+  bota: () => ({
+    partes: [rect(-14, -12, 8, 20), circulo(5, -15, 12, 64), rect(-14, -27, 5, -12), rect(-16.5, 17, 10.5, 28)],
+    hoyo: V(-3, 23.5), texto: { y: 3, w: 15, h: 8 },
+  }),
+  gorro: () => ({
+    // Punta ancha que llega hasta el pompón (un puente delgado se rompería)
+    partes: [[V(-21, -12), V(21, -12), V(19.5, 6), V(18, 17), V(12, 21), V(3, 11)], circulo(16, 22, 6.5, 40), rect(-26, -26, 26, -11)],
+    hoyo: V(16, 22), texto: { y: -18.5, w: 44, h: 8 },
+  }),
+};
+export const es3d = forma => !!SILUETAS_3D[forma];
+
+// Decisión de Luciana (17-nov): redondas de los dos lados, en 2 mitades que se pegan.
+// Cada mitad es abombada con espalda plana; la de atrás sale en espejo para que coincidan
+// al pegarlas espalda con espalda. El nombre va en las dos caras.
+async function construir3d(d, lado = 'frente') {
+  const C = await cargarClipper(), S = 1000, k = CONFIG.tamanoMm / 55, sil = SILUETAS_3D[d.forma](), avisos = [];
+  const sx = lado === 'espalda' ? -1 : 1;
+  const aC = pts => pts.map(v => ({ X: Math.round(sx * v.x * k * S), Y: Math.round(v.y * k * S) }));
+  const desdeC = p => p.map(q => V(q.X / S, q.Y / S));
+  const u = new C.Clipper(), silueta = new C.Paths();
+  u.AddPaths(sil.partes.map(aC), C.PolyType.ptSubject, true);
+  u.Execute(C.ClipType.ctUnion, silueta, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+  const hoyo = aC(circulo(sil.hoyo.x, sil.hoyo.y, R_HOYO / k, 32));
+  // Silueta encogida 'inset' mm, menos el hoyo (el hoyo no se agranda en las capas de arriba)
+  const capa = inset => {
+    let paths = silueta;
+    if (inset > 0) { const o = new C.ClipperOffset(2, 0.02 * S); paths = new C.Paths(); o.AddPaths(silueta, C.JoinType.jtRound, C.EndType.etClosedPolygon); o.Execute(paths, -inset * S); }
+    const c = new C.Clipper(), t = new C.PolyTree();
+    c.AddPaths(paths, C.PolyType.ptSubject, true); c.AddPath(hoyo, C.PolyType.ptClip, true);
+    c.Execute(C.ClipType.ctDifference, t, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+    return C.JS.PolyTreeToExPolygons(t).filter(e => e.outer.length >= 3).map(e => forma(desdeC(e.outer), e.holes.filter(h => h.length >= 3).map(desdeC)));
+  };
+  const grupo = new THREE.Group();
+  grupo.add(new THREE.Mesh(extruir(capa(0), BASE_3D, 0)));
+  for (let i = 0; i < CAPAS; i++) {
+    const t0 = i / CAPAS * Math.PI / 2, t1 = (i + 1) / CAPAS * Math.PI / 2;
+    const z0 = BASE_3D + DOMO * Math.sin(t0), z1 = BASE_3D + DOMO * Math.sin(t1);
+    const f = capa(R_DOMO * (1 - Math.cos((t0 + t1) / 2)));
+    if (!f.length) break;
+    grupo.add(new THREE.Mesh(extruir(f, z1 - z0 + 0.02, z0 - 0.01)));
+  }
+  const arriba = BASE_3D + DOMO;
+  const texto = (d.nombre || '').trim();
+  if (texto) {
+    const font = await cargarFuente(d.letra);
+    const b = font.getPath(texto, 0, 0, 10).getBoundingBox(), w = b.x2 - b.x1, h = b.y2 - b.y1;
+    if (w > 0 && h > 0) {
+      const size = 10 * Math.min(sil.texto.w * k / w, sil.texto.h * k / h);
+      const bb = font.getPath(texto, 0, 0, size).getBoundingBox();
+      const dx = -(bb.x1 + bb.x2) / 2, dy = sil.texto.y * k + (bb.y1 + bb.y2) / 2;
+      let formas;
+      // En las 3D el nombre es más chico: engrosar la mitad para que no se tapen los huecos de las letras
+      try { formas = await formasTextoGruesas(font, texto, size, (ENGROSAR[d.letra] ?? 0) / 2); }
+      catch (e) { formas = formasTexto(font, texto, size); }
+      if (formas.length) grupo.add(new THREE.Mesh(extruir(formas, ALTO_LETRA_3D, arriba - 0.1, dx, dy)));
+      if (bb.y2 - bb.y1 < LETRA_CHICA * k * 0.85) avisos.push('El nombre queda chiquito para esta figura. Prueben uno más corto.');
+    }
+  }
+  if (sil.detalles) grupo.add(new THREE.Mesh(extruir(sil.detalles.map(p => forma(p.map(v => V(sx * v.x * k, v.y * k)))), ALTO_DETALLE_3D, arriba - 0.1)));
+  return { grupo, hoyo: V(sx * sil.hoyo.x * k, sil.hoyo.y * k), avisos };
+}
+// Para ver la figura completa: las dos mitades pegadas espalda con espalda.
+async function construir3dArmado(d) {
+  const [f, e] = await Promise.all([construir3d(d, 'frente'), construir3d(d, 'espalda')]);
+  e.grupo.rotation.y = Math.PI;
+  const g = new THREE.Group(); g.add(f.grupo, e.grupo);
+  return { grupo: g, hoyo: f.hoyo, avisos: f.avisos };
+}
+// Una pieza para imprimir. En las 3D, cada mitad es una pieza aparte (ocupa un lugar).
+export function construirPieza(d, lado = 'frente') { return es3d(d.forma) ? construir3d(d, lado) : construir(d); }
+
+/* ---------- ganchos impresos (idea de Luciana, 17-nov) ---------- */
+// Gancho en S: la curva grande se cuelga de la rama y la chica entra por el hoyo de 3.5 mm.
+const ANCHO_GANCHO = 2.2, ALTO_GANCHO = 2.2;
+export async function ganchosSTL(n = 15) {
+  const C = await cargarClipper(), S = 1000;
+  const arco = (cx, cy, r, a0, a1, pasos) => Array.from({ length: pasos + 1 }, (_, i) => { const a = (a0 + (a1 - a0) * i / pasos) * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; });
+  const linea = [...arco(-5, 10, 5, 200, 0, 24), [0, -12], ...arco(3.5, -12, 3.5, 180, 360, 18), [7, -9.5]];
+  const o = new C.ClipperOffset(2, 0.02 * S), sol = new C.Paths();
+  o.AddPath(linea.map(([x, y]) => ({ X: Math.round(x * S), Y: Math.round(y * S) })), C.JoinType.jtRound, C.EndType.etOpenRound);
+  o.Execute(sol, ANCHO_GANCHO / 2 * S);
+  const figura = sol.map(p => forma(p.map(q => V(q.X / S, q.Y / S))));
+  const raiz = new THREE.Group(), cols = 5;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(extruir(figura, ALTO_GANCHO, 0));
+    m.position.set((i % cols - (cols - 1) / 2) * 22, (Math.floor(i / cols) - 1) * 38, 0);
+    raiz.add(m);
+  }
+  raiz.updateMatrixWorld(true);
+  const data = new STLExporter().parse(raiz, { binary: true });
+  raiz.traverse(x => x.geometry && x.geometry.dispose());
+  return new Blob([data], { type: 'model/stl' });
+}
+
+/* ---------- volumen (para estimar gramos) ---------- */
+export function volumenMm3(grupo) {
+  let total = 0;
+  grupo.traverse(o => {
+    if (!o.isMesh) return;
+    const p = o.geometry.attributes.position; let v = 0;
+    for (let i = 0; i < p.count; i += 3) {
+      const ax = p.getX(i), ay = p.getY(i), az = p.getZ(i), bx = p.getX(i + 1), by = p.getY(i + 1), bz = p.getZ(i + 1), cx = p.getX(i + 2), cy = p.getY(i + 2), cz = p.getZ(i + 2);
+      v += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
+    }
+    total += Math.abs(v);
+  });
+  return total;
+}
+
 /* ---------- pieza completa ---------- */
 const extruir = (formas, alto, z, dx = 0, dy = 0) => {
   const g = new THREE.ExtrudeGeometry(formas, { depth: alto, bevelEnabled: false, curveSegments: 8 });
@@ -147,6 +274,7 @@ const extruir = (formas, alto, z, dx = 0, dy = 0) => {
 };
 
 export async function construir(d) {
+  if (es3d(d.forma)) return construir3dArmado(d);
   const S = CONFIG.tamanoMm, pf = perfil(d.forma, S), avisos = [];
   const grupo = new THREE.Group();
   grupo.add(new THREE.Mesh(extruir([forma(pf.contorno, [circulo(pf.hoyo.x, pf.hoyo.y, R_HOYO)])], GROSOR, 0)));
@@ -177,12 +305,14 @@ export async function construir(d) {
 }
 
 /* ---------- STL: una pieza o una tanda de hasta 4 en cuadro de 2 × 2 ---------- */
+// Cada elemento es un diseño (pieza plana o frente de 3D) o {d, lado} para elegir la mitad.
 export async function stlDe(disenos) {
   const S = CONFIG.tamanoMm, off = S / 2 + 2;
   const pos = [[-off, off], [off, off], [-off, -off], [off, -off]];
   const raiz = new THREE.Group();
   for (let i = 0; i < disenos.length && i < 4; i++) {
-    const { grupo } = await construir(disenos[i]);
+    const u = disenos[i].d ? disenos[i] : { d: disenos[i], lado: 'frente' };
+    const { grupo } = await construirPieza(u.d, u.lado);
     if (disenos.length > 1) grupo.position.set(pos[i][0], pos[i][1], 0);
     raiz.add(grupo);
   }

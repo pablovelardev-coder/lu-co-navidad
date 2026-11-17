@@ -20,7 +20,9 @@ export function precioUnitario(n, p) {
   return Math.round((p.p4 + c * (p.porTanda - n) / n * (p.p4 - costoVariable(p))) / 5) * 5;
 }
 
-export const lugaresDe = item => (item.forma === 'redonda' ? 2 : 1);
+// Los adornos 3D se imprimen en 2 mitades: cada figura ocupa 2 lugares de la tanda.
+const FORMAS_3D = ['esfera3d', 'estrella3d', 'corazon3d', 'arbol3d', 'muneco', 'bota', 'gorro'];
+export const lugaresDe = item => (FORMAS_3D.includes(item.forma) ? 2 : 1);
 
 // Cotiza un carrito: agrupa por color porque cada tanda es de un solo color.
 export function cotizar(items, p) {
