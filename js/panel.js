@@ -1,6 +1,7 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
 import { COLORES, ESTADOS, colorDe, formaDe, ornSVG, esc } from './catalog.js';
 import { lugaresDe } from './pricing.js';
+import { correoRecordado } from './store.js';
 
 const fmt = n => '$' + Math.round(n || 0).toLocaleString('es-MX');
 const hoy = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
@@ -88,8 +89,9 @@ export async function vPanel(ctx) {
           </div>
           ${o.payment === 'Mercado Pago' ? `<label class="f">Liga de pago de Mercado Pago<input class="field" data-k="pay_link" placeholder="https://mpago.la/..." value="${esc(o.pay_link || '')}"></label>` : ''}
           <label class="f">Notas<input class="field" data-k="notes" maxlength="200" value="${esc(o.notes || '')}"></label>
-          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-stl>Descargar piezas (STL)</button></div>
-        </div>`).join('')}`;
+          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-stl>Descargar piezas (STL)</button><button class="linkbtn" data-del style="margin-left:auto">Borrar pedido</button></div>
+        </div>`).join('')}
+      ${lista.length ? '<p class="hint">Si un pedido real no se hizo, mejor cámbialo a "Cancelado": así cuenta en tu funnel. "Borrar pedido" es para pruebas o errores y no se puede deshacer.</p>' : ''}`;
     box.querySelectorAll('[data-fi]').forEach(b => b.onclick = () => { filtro = b.dataset.fi; pinta(); });
     box.querySelectorAll('.ord').forEach(card => {
       const o = pedidos.find(x => x.id === card.dataset.id);
@@ -102,6 +104,13 @@ export async function vPanel(ctx) {
         try { await store.updateOrder(o.id, patch); toast('Guardado'); await recarga(); } catch (e) { toast('No se guardó: ' + e.message); }
       };
       card.querySelector('[data-stl]').onclick = () => bajar(unidades([o]), `pedido-${o.code}`);
+      const del = card.querySelector('[data-del]'); let armado = false, t = 0;
+      del.onclick = async () => {
+        if (!armado) { armado = true; del.textContent = `¿Seguro? Toca otra vez para borrar ${o.code}`; t = setTimeout(() => { armado = false; del.textContent = 'Borrar pedido'; }, 4000); return; }
+        clearTimeout(t); del.disabled = true;
+        try { await store.deleteOrder(o.id); toast(`Pedido ${o.code} borrado`); await recarga(); }
+        catch (e) { del.disabled = false; toast('No se borró: ' + e.message); }
+      };
     });
   }
 
@@ -197,14 +206,16 @@ function login(ctx) {
   const { view, store, toast } = ctx, prueba = store.modo === 'prueba';
   view.innerHTML = `
     <div class="bar"><a class="back" href="#inicio" aria-label="Regresar">‹</a><h2>Panel de Lu</h2></div>
-    <form id="login" class="card" style="display:grid;gap:12px">
-      ${prueba ? '<p class="hint">Modo prueba: escribe el PIN del panel.</p>' : '<label class="f" for="correo">Correo<input class="field" id="correo" type="email" autocomplete="username" required></label>'}
-      <label class="f" for="clave">${prueba ? 'PIN' : 'Contraseña'}<input class="field" id="clave" type="password" autocomplete="current-password" required></label>
+    <form id="login" class="card" style="display:grid;gap:12px" method="post" action="#panel">
+      ${prueba ? '<p class="hint">Modo prueba: escribe el PIN del panel.</p>' : `<label class="f" for="correo">Correo<input class="field" id="correo" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" required value="${esc(correoRecordado())}"></label>`}
+      <label class="f" for="clave">${prueba ? 'PIN' : 'Contraseña'}<input class="field" id="clave" name="password" type="password" autocomplete="current-password" required></label>
+      ${prueba ? '' : '<label class="row" for="recordar" style="font-weight:800"><input type="checkbox" id="recordar" checked style="width:22px;height:22px;accent-color:var(--vino)"> Recordarme en este aparato</label><p class="hint">El panel se queda abierto en este aparato hasta que toques "Salir". Cuando el iPad pregunte si quieres guardar la contraseña, dile que sí: la guarda su llavero, no la app.</p>'}
       <button class="btn">Entrar</button>
     </form>`;
   view.querySelector('#login').onsubmit = async e => {
     e.preventDefault();
-    try { await store.login(prueba ? '' : view.querySelector('#correo').value.trim(), view.querySelector('#clave').value); vPanel(ctx); }
+    const recordar = prueba ? true : view.querySelector('#recordar').checked;
+    try { await store.login(prueba ? '' : view.querySelector('#correo').value.trim(), view.querySelector('#clave').value, recordar); vPanel(ctx); }
     catch (err) { toast(err.message); }
   };
 }

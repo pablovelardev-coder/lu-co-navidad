@@ -11,6 +11,23 @@ const inventarioInicial = () => COLORES.map((c, i) => ({ color: c.id, grams_left
 function safeGet(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } }
 function safeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } }
 
+// "Recordarme en este aparato": la sesión del panel queda guardada en el aparato (localStorage)
+// y se renueva sola hasta que alguien toque "Salir". Sin la palomita, se borra al cerrar la pestaña.
+// La contraseña NUNCA se guarda en la app: la guarda el llavero del iPad (iCloud).
+const quiereRecordar = () => { try { return localStorage.getItem('luco-recordar') !== '0'; } catch (e) { return false; } };
+const almacenSesion = {
+  getItem: k => { try { return localStorage.getItem(k) ?? sessionStorage.getItem(k); } catch (e) { return null; } },
+  setItem: (k, v) => { try { (quiereRecordar() ? localStorage : sessionStorage).setItem(k, v); (quiereRecordar() ? sessionStorage : localStorage).removeItem(k); } catch (e) { /* sin almacenamiento */ } },
+  removeItem: k => { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) { /* sin almacenamiento */ } },
+};
+export function recordarAparato(si, correo) {
+  try {
+    localStorage.setItem('luco-recordar', si ? '1' : '0');
+    if (si && correo) localStorage.setItem('luco-correo-panel', correo); else localStorage.removeItem('luco-correo-panel');
+  } catch (e) { /* sin almacenamiento */ }
+}
+export function correoRecordado() { try { return localStorage.getItem('luco-correo-panel') || ''; } catch (e) { return ''; } }
+
 class DemoStore {
   constructor() { this.modo = 'prueba'; }
   async getSettings() {
@@ -38,6 +55,7 @@ class DemoStore {
     const i = orders.findIndex(o => o.id === id); if (i < 0) throw new Error('No existe el pedido');
     orders[i] = { ...orders[i], ...patch }; safeSet('luco-prueba-pedidos', orders); return orders[i];
   }
+  async deleteOrder(id) { safeSet('luco-prueba-pedidos', safeGet('luco-prueba-pedidos', []).filter(o => o.id !== id)); }
   async updateInventory(color, patch) {
     const inv = safeGet('luco-prueba-filamento', inventarioInicial());
     const i = inv.findIndex(r => r.color === color); inv[i] = { ...inv[i], ...patch }; safeSet('luco-prueba-filamento', inv);
@@ -48,7 +66,7 @@ class SupabaseStore {
   constructor() { this.modo = 'supabase'; this.ready = this._init(); }
   async _init() {
     const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
-    this.sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey);
+    this.sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { storage: almacenSesion, persistSession: true, autoRefreshToken: true } });
   }
   async _q(p) { const { data, error } = await p; if (error) throw new Error(error.message); return data; }
   async getSettings() {
@@ -75,8 +93,9 @@ class SupabaseStore {
     const ok = await this._q(this.sb.rpc('is_admin'));
     return ok ? { email: data.session.user.email } : null;
   }
-  async login(email, password) {
+  async login(email, password, recordar = true) {
     await this.ready;
+    recordarAparato(recordar, email);
     const { error } = await this.sb.auth.signInWithPassword({ email, password });
     if (error) throw new Error('Correo o contraseña incorrectos');
     if (!(await this.session())) { await this.sb.auth.signOut(); throw new Error('Esta cuenta no tiene permiso para el panel'); }
@@ -85,6 +104,7 @@ class SupabaseStore {
   async logout() { await this.ready; await this.sb.auth.signOut(); }
   async listOrders() { await this.ready; return this._q(this.sb.from('orders').select('*').order('created_at', { ascending: false })); }
   async updateOrder(id, patch) { await this.ready; return this._q(this.sb.from('orders').update(patch).eq('id', id).select().single()); }
+  async deleteOrder(id) { await this.ready; await this._q(this.sb.from('orders').delete().eq('id', id)); }
   async updateInventory(color, patch) { await this.ready; await this._q(this.sb.from('inventory').update(patch).eq('color', color)); }
 }
 

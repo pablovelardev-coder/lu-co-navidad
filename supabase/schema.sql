@@ -52,6 +52,7 @@ create policy inventory_read on public.inventory for select to anon, authenticat
 create policy inventory_admin on public.inventory for update to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy orders_admin_select on public.orders for select to authenticated using (public.is_admin());
 create policy orders_admin_update on public.orders for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy orders_admin_delete on public.orders for delete to authenticated using (public.is_admin());
 -- Sin insert directo: los clientes crean pedidos solo con create_order().
 
 -- Códigos al azar (LU-7KQ3M): no se pueden adivinar y protegen los nombres que van en las esferas.
