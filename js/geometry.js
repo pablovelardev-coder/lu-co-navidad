@@ -157,11 +157,24 @@ const SILUETAS_3D = {
     hoyo: V(0, 26), texto: { y: -11.5, w: 20, h: 8 },
     detalles: [circulo(-3.5, 13.5, 1.15, 14), circulo(3.5, 13.5, 1.15, 14), [V(-0.8, 10.6), V(6.5, 9.4), V(-0.8, 8.2)]],
   }),
-  // Pie grande de talón a punta (17-nov: "muy chico el pie"); el nombre va en el pie
-  bota: () => ({
-    partes: [rect(-21, 18, 3, 28), rect(-18, -12, 0, 19), circulo(-9, -18, 9.5, 48), rect(-9, -27.5, 12, -8.5), circulo(12, -18, 9.5, 48)],
-    hoyo: V(-9, 23.5), texto: { x: 1.5, y: -18, w: 30, h: 9 },
-  }),
+  // Bota clásica (17-nov, 2ª versión): puño ancho, pierna inclinada 12°, talón redondo y punta
+  // redondeada, pie más corto. Se dibuja derecha, se inclina y se centra.
+  bota: () => {
+    const s = new THREE.Shape();
+    s.moveTo(-15, 27); s.lineTo(5, 27); s.lineTo(5, 17); s.lineTo(3, 17); s.lineTo(4, -2);
+    s.bezierCurveTo(5, -8, 13, -7, 17, -13);    // empeine
+    s.bezierCurveTo(21, -17, 17, -22, 11, -22); // punta
+    s.bezierCurveTo(5, -22.5, 0, -23, -4, -22); // suela
+    s.bezierCurveTo(-10, -22, -12.5, -17, -12, -12); // talón
+    s.lineTo(-12, 17); s.lineTo(-15, 17);
+    const a = -12 * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+    const rot = v => V(v.x * c - v.y * sn, v.x * sn + v.y * c);
+    const pts = limpia(s.getPoints(12)).map(rot);
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const mv = v => V(v.x - cx, v.y - cy), t = mv(rot(V(2, -14)));
+    return { partes: [pts.map(mv)], hoyo: mv(rot(V(-5, 22))), texto: { x: t.x, y: t.y, w: 18, h: 8 } };
+  },
   gorro: () => ({
     // Punta ancha que llega hasta el pompón (un puente delgado se rompería)
     partes: [[V(-21, -12), V(21, -12), V(19.5, 6), V(18, 17), V(12, 21), V(3, 11)], circulo(16, 22, 6.5, 40), rect(-26, -26, 26, -11)],
