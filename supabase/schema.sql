@@ -104,3 +104,10 @@ on conflict (color) do nothing;
 
 -- Después de crear las cuentas del panel en Authentication:
 -- insert into public.admins (email) values ('<correo del panel>');
+
+-- Avisos en vivo al panel cuando llega un pedido (17-nov). Realtime respeta RLS: solo admins reciben.
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders') then
+    alter publication supabase_realtime add table public.orders;
+  end if;
+end $$;

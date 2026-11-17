@@ -2,7 +2,7 @@
 import { store } from './store.js';
 import { CONFIG } from './config.js';
 import { COLORES, FORMAS, CATEGORIAS, ADORNOS, LETRAS, PAGOS, PASOS_CLIENTE, MAX_LETRAS, colorDe, formaDe, es3dForma, nombrePieza, ornSVG, esc, ARCOIRIS_CSS } from './catalog.js';
-import { PRECIOS_BASE, cotizar, escalera, precioUnitario } from './pricing.js';
+import { PRECIOS_BASE, cotizar, escalera, precioUnitario, precio3d } from './pricing.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
@@ -37,24 +37,71 @@ async function ruta() {
   } catch (e) { console.error(e); view.innerHTML = `<p class="warn">Algo falló: ${esc(e.message)}. Intenta otra vez.</p>`; }
 }
 
+/* ---------- pasos para pedir (se resalta en el que vas) ---------- */
+const PASOS_PEDIR = [
+  ['Elige', 'tu figura', '#inicio', 'Toca la figura que más te guste.'],
+  ['Diseña', 'color y nombre', null, 'Escoge el color y escribe el nombre. Cuando te guste, toca «Agregar a mi pedido».'],
+  ['Pide', 'manda tu pedido', '#pedido', 'Revisa tu pedido, pon tus datos y toca «Enviar pedido». Todavía no pagas nada.'],
+  ['Paga', 'cuando Lu acepte', null, 'Luciana revisa tu pedido. Cuando lo acepte, aquí aparecen los datos para pagar.'],
+];
+function rutaPedir(n) {
+  return `<nav class="ruta" aria-label="Pasos para pedir"><ol>${PASOS_PEDIR.map(([t, s, href], i) => {
+    const cls = i < n ? 'done' : i === n ? 'now' : '', dentro = `<i>${i < n ? '✓' : i + 1}</i><b>${t}</b><small>${s}</small>`;
+    return `<li class="${cls}" ${i === n ? 'aria-current="step"' : ''}>${i < n && href ? `<a href="${href}">${dentro}</a>` : `<span>${dentro}</span>`}</li>`;
+  }).join('')}</ol><p class="ruta-ayuda"><span class="aqui">Estás aquí</span> ${PASOS_PEDIR[n][3]}</p></nav>`;
+}
+
+/* ---------- el camino de Luciana: para qué es Lu & Co. ---------- */
+const CAMINO = [
+  ['🎨', 'Diseñar mis propios adornos', 'Dibujé las figuras, escogí los colores y probé cuál letra se ve mejor.'],
+  ['📱', 'Hacer una app de verdad', '¡Esta! Yo decidí cómo se ve cada pantalla.'],
+  ['🛍️', 'Vender', 'Aquí vamos. Gracias por diseñar tu adorno conmigo.'],
+  ['🖨️', 'Producir y sacar mis costos', 'Cuánto filamento gasto, cuánto tarda la impresora y cuánto me queda de verdad.'],
+  ['🧵', 'Cuidar mi inventario', 'Saber cuánto filamento me queda de cada color para no quedarme sin rojo.'],
+  ['📅', 'Armar mi programa de producción', 'Juntar los pedidos del mismo color para llenar cada tanda de la impresora.'],
+  ['💰', 'Cobrar', 'Sí, cobrar también se aprende.'],
+];
+let caminoAbierto = false, pasoCamino = -1;
+function camino() {
+  const e = Math.min(CAMINO.length - 1, Math.max(0, CONFIG.etapa ?? 2));
+  return `<section class="lu-hola">
+    <p class="lu-saludo"><span class="sig">¡Hola!</span> Soy Luciana. Aquí diseñas tu adorno navideño con el nombre que quieras y yo lo imprimo en mi casa.</p>
+    <button class="linkbtn" id="verCamino" aria-expanded="${caminoAbierto}">${caminoAbierto ? 'Cerrar' : '¿Por qué hice Lu &amp; Co.? 🎸'}</button>
+    ${caminoAbierto ? `<div class="camino">
+      <p>Lu &amp; Co. es mi primer negocio. Lo hago con mi papá para <b>aprender a emprender</b>. Esto es lo que voy aprendiendo:</p>
+      <ol>${CAMINO.map(([ico, t, d], i) => `<li class="${i < e ? 'done' : i === e ? 'now' : ''}">
+        <button data-paso="${i}" aria-expanded="${pasoCamino === i}"><i>${i < e ? '✓' : ico}</i><span>${t}${i === e ? ' <em>ahorita vamos aquí</em>' : ''}</span></button>
+        ${pasoCamino === i ? `<p>${d}</p>` : ''}</li>`).join('')}</ol>
+      <p>Y lo más importante: <b>¡divertirnos en el proceso!</b> 🎉</p>
+      <p class="meta">Todo lo que gane lo estoy ahorrando para la <b>guitarra de LEGO de Olivia Rodrigo</b> 🎸💜</p>
+      <span class="sig" style="display:block;text-align:right">Lu</span>
+    </div>` : ''}
+  </section>`;
+}
+
 /* ---------- inicio ---------- */
 const MUESTRA = { plana: ['rojo', 'Ana'], estrella: ['amarillo', 'Leo'], corazon: ['morado', 'Mía'], arbol: ['verde', 'Pau'],
   esfera3d: ['azul', 'Sofi'], estrella3d: ['amarillo', 'Lu'], corazon3d: ['rojo', 'Mía'], arbol3d: ['verde', 'Pau'], muneco: ['blanco', 'Leo'], bota: ['rojo', 'Ana'], gorro: ['rojo', 'Lu'] };
-let catInicio = 'nombre';
+let catInicio = venta3d() ? '3d' : 'nombre';
+const categoriasOrden = () => (venta3d() ? [...CATEGORIAS].sort((a, b) => (b.id === '3d') - (a.id === '3d')) : CATEGORIAS);
 function vInicio() {
   const p = ajustes.precios, en3d = catInicio === '3d';
   view.innerHTML = `
-    <p class="hello">¿Qué vas a diseñar hoy?</p>
-    <div class="tabs" role="tablist" style="grid-template-columns:1fr 1fr">${CATEGORIAS.map(c => `<button role="tab" data-cat="${c.id}" aria-selected="${c.id === catInicio}">${c.nombre}</button>`).join('')}</div>
-    ${en3d ? `<p class="sub">Redondos de los dos lados: se imprimen en dos mitades y se pegan.${venta3d() ? '' : ' <b>Muy pronto:</b> ya los puedes diseñar y los estamos probando.'}</p>` : ''}
+    ${camino()}
+    ${rutaPedir(0)}
+    <div class="tabs" role="tablist" style="grid-template-columns:1fr 1fr">${categoriasOrden().map(c => `<button role="tab" data-cat="${c.id}" aria-selected="${c.id === catInicio}">${c.nombre}</button>`).join('')}</div>
+    ${en3d ? `<p class="sub">Redondos de los dos lados: se imprimen en dos mitades y se pegan.${venta3d() ? '' : ' <b>Muy pronto:</b> ya los puedes diseñar y los estamos probando.'}</p>` : '<p class="sub">Planas, con el nombre en relieve.</p>'}
     <div class="cat">${FORMAS.filter(f => f.cat === catInicio).map(f => {
       const [color, nombre] = MUESTRA[f.id];
       const svg = ornSVG({ forma: f.id, color, nombre, letra: 'elegante' }, 88);
-      const precio = f.cat === '3d' ? (venta3d() ? `desde ${fmt(2 * p.p4)} por figura` : 'Muy pronto') : `desde ${fmt(p.p4)} cada una`;
+      const precio = f.cat === '3d' ? (venta3d() ? `desde ${fmt(p.p3d)}` : 'Muy pronto') : `desde ${fmt(p.p4)} cada una`;
       return `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>${precio}</span></a>`;
     }).join('')}</div>
-    <div class="steps"><div><i>1</i>Diseña</div><div><i>2</i>Pide</div><div><i>3</i>Recibe</div></div>
-    ${en3d ? '' : `<div class="card" style="display:grid;gap:10px">
+    ${en3d ? (venta3d() ? `<div class="card" style="display:grid;gap:10px">
+      <p class="lbl">Precio de cada adorno 3D</p>
+      <div class="ladder" style="grid-template-columns:1fr 1fr"><div><b>${fmt(precio3d(1, p))}</b>si pides 1</div><div class="best"><b>${fmt(p.p3d)}</b>cada uno si pides 2 o más</div></div>
+      <p class="hint">El precio es por adorno y baja cuando pides 2 del mismo color, porque la impresora hace 2 adornos 3D a la vez de un solo color.</p>
+    </div>` : '') : `<div class="card" style="display:grid;gap:10px">
       <p class="lbl">Precio de cada esfera</p>
       <div class="ladder">${escalera(p).map(e => `<div class="${e.n === 4 ? 'best' : ''}"><b>${fmt(e.cu)}</b>cada una<br>${e.n === 4 ? 'si pides 4 o más' : e.n === 1 ? 'si pides 1' : `si pides ${e.n}`}</div>`).join('')}</div>
       <p class="hint">El precio es por esfera y baja cuando pides varias del mismo color, porque la impresora hace 4 a la vez de un solo color.</p>
@@ -62,6 +109,8 @@ function vInicio() {
     <a class="btn soft" href="#seguimiento">¿Cómo va mi pedido?</a>
     <a class="btn gold" href="#compartir">Comparte Lu &amp; Co. con tus amigas</a>`;
   view.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { catInicio = b.dataset.cat; vInicio(); });
+  $('#verCamino').onclick = () => { caminoAbierto = !caminoAbierto; vInicio(); if (caminoAbierto) $('.lu-hola').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+  view.querySelectorAll('[data-paso]').forEach(b => b.onclick = () => { pasoCamino = pasoCamino === +b.dataset.paso ? -1 : +b.dataset.paso; const y = scrollY; vInicio(); scrollTo(0, y); });
 }
 
 /* ---------- compartir: QR y mensaje ---------- */
@@ -119,6 +168,7 @@ async function vDisenar(formaId) {
   catInicio = formaDe(st.forma).cat;
   view.innerHTML = `
     <div class="bar"><a class="back" href="#inicio" aria-label="Regresar">‹</a><h2 id="ttl"></h2></div>
+    ${rutaPedir(1)}
     <div class="stage"><canvas id="c3d" role="img" aria-label="Tu esfera en 3D"></canvas><p class="loading" id="loading">Preparando tu esfera…</p></div>
     <p class="warn" id="aviso" hidden></p>
     <div class="tabs" role="tablist">${['Forma', 'Color', 'Nombre', 'Adorno'].map((t, i) => `<button role="tab" data-tab="${i}" aria-selected="${i === pestana}">${t}</button>`).join('')}</div>
@@ -131,7 +181,7 @@ async function vDisenar(formaId) {
     $('#precioCard').innerHTML = !d3
       ? `<div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p>`
       : puede
-        ? `<div class="price"><span>Precio por figura</span><b>${fmt(2 * precioUnitario(2, p))}</b></div><p class="hint">Se imprime en dos mitades. Si pides 2 del mismo color, cada figura cuesta ${fmt(2 * p.p4)}.</p>`
+        ? `<div class="price"><span>Precio por adorno</span><b>${fmt(precio3d(1, p))}</b></div><p class="hint">Si pides 2 del mismo color, cada uno cuesta ${fmt(p.p3d)}. Se imprime en dos mitades.</p>`
         : `<div class="price"><span>Adornos 3D</span><b>Muy pronto</b></div><p class="hint">Ya la puedes diseñar. Estamos haciendo las primeras para ponerles precio.</p>`;
     $('#agregar').disabled = !puede;
     $('#agregar').textContent = puede ? 'Agregar a mi pedido' : 'Muy pronto';
@@ -201,22 +251,20 @@ function vPedido() {
   const datos = leer('luco-datos', { adulto: '', tel: '' });
   view.innerHTML = `
     <div class="bar"><a class="back" href="#inicio" aria-label="Seguir diseñando">‹</a><h2>Mi pedido</h2></div>
+    ${rutaPedir(2)}
     <div style="display:grid;gap:8px">${items.map(it => `
       <div class="item">${ornSVG(it, 56)}<div class="nm">${nombreItem(it)}<small>${detalleItem(it)}</small></div>
         <div class="qty"><button data-menos="${it.id}" aria-label="Una menos">−</button>${it.cant}<button data-mas="${it.id}" aria-label="Una más">+</button></div></div>`).join('')}</div>
     <a class="btn soft" href="#inicio">+ Diseñar otra</a>
-    ${q.colores.filter(c => c.faltan).map(c => { const nom = colorDe(c.color).nombre.toLowerCase(), resto = c.lugares % p.porTanda; return `
-      <div class="nudge">${hay3d
-        ? `Llevas ${resto} de 4 lugares de la impresora en ${nom}. Con ${c.faltan} ${c.faltan === 1 ? 'lugar' : 'lugares'} más en ${nom} (un adorno 3D ocupa 2) se llena la tanda y cada lugar cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`
-        : c.lugares > p.porTanda
-          ? `Llevas ${c.lugares} en ${nom}: ${c.lugares - resto} a ${fmt(p.p4)} cada una y ${resto} a ${fmt(c.precioActual)} cada una. Con ${c.faltan} más en ${nom}, todas quedan a ${fmt(p.p4)} cada una.`
-          : `Llevas ${c.lugares} en ${nom}. Con ${c.faltan} más en ${nom} completas tu tanda de 4 y cada una cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`}
-        <div class="meter"><i style="width:${resto / p.porTanda * 100}%"></i></div></div>`; }).join('')}
+    ${q.colores.filter(c => c.faltan).map(c => { const nom = colorDe(c.color).nombre.toLowerCase(), pz = c.es3d ? ['adorno 3D', 'adornos 3D', 'cada uno'] : ['esfera', 'esferas', 'cada una']; return `
+      <div class="nudge">${c.n > c.porTanda
+        ? `Llevas ${c.n} ${pz[1]} en ${nom}: ${c.n - c.resto} a ${fmt(c.mejor)} ${pz[2]} y ${c.resto} a ${fmt(c.precioActual)}. Con ${c.faltan} más en ${nom}, todos quedan a ${fmt(c.mejor)} ${pz[2]}.`
+        : `Llevas ${c.n} ${c.n === 1 ? pz[0] : pz[1]} en ${nom}. Con ${c.faltan} más en ${nom} llenas la impresora y ${c.es3d ? 'cada uno' : 'cada una'} cuesta ${fmt(c.mejor)} en vez de ${fmt(c.precioActual)}.`}
+        <div class="meter"><i style="width:${c.resto / c.porTanda * 100}%"></i></div></div>`; }).join('')}
     <div class="card" style="display:grid;gap:6px">
-      ${q.colores.map(c => `<div class="price" style="font-weight:700;font-size:.92rem"><span>${colorDe(c.color).nombre}: ${c.partes.map(pt => hay3d
-        ? `${pt.cant} ${pt.cant === 1 ? 'lugar' : 'lugares'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada uno' : ''}`
+      ${q.colores.map(c => `<div class="price" style="font-weight:700;font-size:.92rem"><span>${colorDe(c.color).nombre}${c.es3d ? ' 3D' : ''}: ${c.partes.map(pt => c.es3d
+        ? `${pt.cant} ${pt.cant === 1 ? 'adorno' : 'adornos'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada uno' : ''}`
         : `${pt.cant} ${pt.cant === 1 ? 'esfera' : 'esferas'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada una' : ''}`).join(' + ')}</span><span>${fmt(c.total)}</span></div>`).join('')}
-      ${hay3d ? '<p class="hint">Cada adorno 3D ocupa 2 lugares de la impresora, uno por cada mitad.</p>' : ''}
       <div class="price" style="border-top:1px dashed var(--linea);padding-top:6px"><span>Total · ${items.reduce((s, i) => s + i.cant, 0)} ${hay3d ? 'adornos' : 'esferas'}</span><b>${fmt(q.total)}</b></div>
     </div>
     <form id="formPedido" style="display:grid;gap:12px" novalidate>
@@ -276,6 +324,7 @@ async function vSeguimiento(code) {
     else pago = `<div class="card"><b>Total del pedido: ${fmt(o.total)}</b><br>Papá te manda los datos para pagar por WhatsApp.</div>`;
   }
   box.innerHTML = `
+    ${o.status === 'Nuevo' || o.status === 'Aceptado' ? rutaPedir(3) : ''}
     <div class="code"><small>Tu código</small><b>${esc(o.code)}</b><small>Guárdalo para ver cómo va</small></div>
     ${o.status === 'Cancelado' ? '<p class="warn">Este pedido se canceló. Si es un error, avísale a Luciana.</p>' : `
     <div class="timeline">${PASOS_CLIENTE.map(([s, t, d], i) => `<div class="tl ${i < idx ? 'done' : i === idx ? 'now' : ''}"><i>${i < idx ? '✓' : ''}</i><div><b>${t}</b><small>${fecha(o.status_dates && o.status_dates[s]) || (i === idx ? d : '')}</small></div></div>`).join('')}</div>`}

@@ -56,6 +56,11 @@ class DemoStore {
     orders[i] = { ...orders[i], ...patch }; safeSet('luco-prueba-pedidos', orders); return orders[i];
   }
   async deleteOrder(id) { safeSet('luco-prueba-pedidos', safeGet('luco-prueba-pedidos', []).filter(o => o.id !== id)); }
+  // Avisa cuando llega un pedido (en modo prueba, desde otra pestaña del mismo aparato)
+  alNuevoPedido(cb) {
+    const f = e => { if (e.key !== 'luco-prueba-pedidos') return; const antes = new Set(JSON.parse(e.oldValue || '[]').map(o => o.id)); JSON.parse(e.newValue || '[]').filter(o => !antes.has(o.id)).forEach(cb); };
+    addEventListener('storage', f); return () => removeEventListener('storage', f);
+  }
   async updateInventory(color, patch) {
     const inv = safeGet('luco-prueba-filamento', inventarioInicial());
     const i = inv.findIndex(r => r.color === color); inv[i] = { ...inv[i], ...patch }; safeSet('luco-prueba-filamento', inv);
@@ -105,6 +110,15 @@ class SupabaseStore {
   async listOrders() { await this.ready; return this._q(this.sb.from('orders').select('*').order('created_at', { ascending: false })); }
   async updateOrder(id, patch) { await this.ready; return this._q(this.sb.from('orders').update(patch).eq('id', id).select().single()); }
   async deleteOrder(id) { await this.ready; await this._q(this.sb.from('orders').delete().eq('id', id)); }
+  // Avisa en vivo cuando llega un pedido (Supabase Realtime; solo admins lo reciben por las reglas RLS)
+  alNuevoPedido(cb) {
+    let canal = null, vivo = true;
+    this.ready.then(() => {
+      if (!vivo) return;
+      canal = this.sb.channel('pedidos-nuevos').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, m => cb(m.new)).subscribe();
+    });
+    return () => { vivo = false; if (canal) this.sb.removeChannel(canal); };
+  }
   async updateInventory(color, patch) { await this.ready; await this._q(this.sb.from('inventory').update(patch).eq('color', color)); }
 }
 

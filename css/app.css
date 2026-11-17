@@ -149,3 +149,60 @@ label.f{display:grid;gap:6px;font-weight:800;font-size:.9rem}
 .guia[open] summary::after{content:"▴"}
 .guia ol{margin:10px 0 6px;padding-left:20px;display:grid;gap:8px;font-size:.92rem}
 .guia ul{margin:6px 0 0;padding-left:18px;display:grid;gap:4px}
+
+/* Pasos para pedir: se resalta en el que vas */
+.ruta{background:var(--blanco);border:1px solid var(--linea);border-radius:18px;padding:12px 10px 10px;display:grid;gap:8px}
+.ruta ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;position:relative}
+.ruta li{position:relative;text-align:center}
+.ruta li:not(:last-child)::after{content:"";position:absolute;top:15px;left:calc(50% + 18px);right:calc(-50% + 18px);height:2px;background:var(--linea)}
+.ruta li.done:not(:last-child)::after{background:var(--vino)}
+.ruta li > a,.ruta li > span{display:grid;justify-items:center;gap:1px;text-decoration:none;color:var(--gris)}
+.ruta i{font-style:normal;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:700;background:var(--perla-2);color:var(--gris);border:2px solid var(--linea)}
+.ruta b{font-size:.86rem;line-height:1.15}
+.ruta small{font-size:.68rem;font-weight:700;line-height:1.15}
+.ruta li.done i{background:var(--vino);border-color:var(--vino);color:#fff}
+.ruta li.done b{color:var(--vino)}
+.ruta li.now i{background:var(--dorado);border-color:var(--dorado);color:#fff;animation:latido 1.6s ease-in-out infinite}
+.ruta li.now b{color:var(--tinta)}
+.ruta li.now small{color:var(--tinta)}
+.ruta-ayuda{margin:0;background:var(--rosa-2);border-radius:12px;padding:8px 10px;font-size:.9rem;font-weight:700;line-height:1.35}
+.aqui{display:inline-block;background:var(--dorado);color:#fff;font-size:.68rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-right:4px;vertical-align:1px}
+@keyframes latido{0%,100%{box-shadow:0 0 0 0 rgba(184,137,46,.55)}50%{box-shadow:0 0 0 8px rgba(184,137,46,0)}}
+
+/* El camino de Luciana */
+.lu-hola{background:linear-gradient(160deg,var(--rosa-2),var(--blanco));border:1px solid var(--rosa);border-radius:22px;padding:14px;display:grid;gap:8px}
+.lu-saludo{margin:0;font-weight:700;line-height:1.4}
+.lu-saludo .sig{font-size:1.5rem;color:var(--vino);margin-right:4px}
+.lu-hola > .linkbtn{justify-self:start}
+.camino{display:grid;gap:10px}
+.camino > p{margin:0}
+.camino ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.camino li{background:var(--blanco);border:1px solid var(--linea);border-radius:14px;opacity:.7}
+.camino li.done,.camino li.now{opacity:1}
+.camino li.now{border:2px solid var(--dorado);box-shadow:0 4px 14px rgba(184,137,46,.25)}
+.camino li button{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;font-weight:800}
+.camino li button:focus-visible{outline:3px solid var(--vino);border-radius:12px}
+.camino li i{font-style:normal;width:30px;height:30px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--perla-2);font-size:1rem}
+.camino li.done i{background:var(--vino);color:#fff;font-weight:900}
+.camino li.now i{background:var(--dorado);animation:latido 1.6s ease-in-out infinite}
+.camino li em{display:inline-block;font-style:normal;background:var(--dorado);color:#fff;font-size:.66rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:4px;vertical-align:2px}
+.camino li p{margin:0;padding:0 12px 10px 50px;font-size:.88rem;color:var(--gris);font-weight:700}
+.camino .meta{background:var(--vino);color:#fff;border-radius:14px;padding:10px 12px;font-weight:700}
+@media (prefers-reduced-motion:reduce){.ruta li.now i,.camino li.now i{animation:none}}
+
+/* Diseños dentro del pedido */
+.dlist{display:grid;gap:6px}
+.drow{display:grid;grid-template-columns:48px 1fr auto;gap:8px;align-items:center;background:var(--perla);border:1px solid var(--linea);border-radius:14px;padding:6px 8px}
+.drow b{font-size:.9rem;line-height:1.2}
+.drow small{display:block;color:var(--gris);font-weight:700;font-size:.78rem}
+
+/* Festejo de pedido nuevo */
+.fiesta{position:fixed;inset:0;z-index:50;background:rgba(58,15,31,.45);display:grid;place-items:center;padding:16px;overflow:hidden}
+.confeti{position:absolute;inset:0;pointer-events:none}
+.confeti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:2px;animation:cae linear forwards}
+@keyframes cae{to{top:105%;transform:translateX(40px) rotate(720deg)}}
+.fiesta-card{position:relative;background:var(--perla);border:2px solid var(--dorado);border-radius:26px;padding:22px 18px;max-width:340px;width:100%;text-align:center;display:grid;gap:8px;animation:salta .5s cubic-bezier(.2,1.6,.4,1)}
+.fiesta-card h3{font-size:1.5rem;color:var(--vino)}
+.fiesta-card p{margin:0}
+.fiesta-ico{font-size:3rem;line-height:1}
+@keyframes salta{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}

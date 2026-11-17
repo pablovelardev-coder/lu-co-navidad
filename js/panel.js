@@ -1,5 +1,5 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
-import { COLORES, ESTADOS, colorDe, formaDe, ornSVG, esc } from './catalog.js';
+import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
 import { lugaresDe } from './pricing.js';
 import { correoRecordado } from './store.js';
 
@@ -16,6 +16,44 @@ const entregadoDe = o => o.status === 'Entregado' ? (fechaDe(o, 'Entregado') || 
 function llego(o, s) { if (fechaDe(o, s)) return true; if (o.status === 'Cancelado') return s === 'Nuevo'; return ESTADOS.indexOf(o.status) >= ESTADOS.indexOf(s); }
 
 let pestana = 'resumen', periodo = 'mes', filtro = 'activos';
+let quitarAviso = null;
+
+/* ----- Festejo cuando llega un pedido ----- */
+const PORRAS = ['¡Vas por tu guitarra! 🎸', '¡Lu & Co. está creciendo!', '¡Eres una gran emprendedora!', '¡A llenar la impresora!', '¡Otra familia va a tener un adorno tuyo!', '¡Así se hace, Lu!'];
+const piezasTxt = o => { const n = (o.items || []).reduce((s, i) => s + i.cant, 0); return `${n} ${n === 1 ? 'adorno' : 'adornos'}`; };
+function sonido() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [523, 659, 784, 1047].forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * 0.12;
+      o.type = 'triangle'; o.frequency.value = f; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      o.start(t); o.stop(t + 0.4);
+    });
+  } catch (e) { /* sin sonido */ }
+}
+function festejar(nuevos, alVer) {
+  if (!nuevos.length) return;
+  document.querySelector('.fiesta')?.remove();
+  const uno = nuevos.length === 1 ? nuevos[0] : null;
+  const titulo = uno ? '¡Llegó un pedido nuevo!' : `¡Llegaron ${nuevos.length} pedidos nuevos!`;
+  const detalle = uno ? `${uno.adult_name || 'Alguien'} pidió ${piezasTxt(uno)} · ${fmt(uno.total)}` : `Mientras no estabas · ${fmt(nuevos.reduce((s, o) => s + (+o.total || 0), 0))} en total`;
+  const porra = PORRAS[Math.floor(Math.random() * PORRAS.length)];
+  const colores = ['#7A1E3A', '#B8892E', '#F4C6D2', '#1F7A4D', '#E6C77A', '#C2185B', '#fff'];
+  const el = document.createElement('div');
+  el.className = 'fiesta'; el.setAttribute('role', 'alertdialog'); el.setAttribute('aria-label', titulo);
+  el.innerHTML = `<div class="confeti" aria-hidden="true">${Array.from({ length: 70 }, () => `<i style="left:${Math.random() * 100}%;background:${colores[Math.floor(Math.random() * colores.length)]};animation-delay:${(Math.random() * 1.2).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.8).toFixed(2)}s;transform:rotate(${Math.floor(Math.random() * 360)}deg)"></i>`).join('')}</div>
+    <div class="fiesta-card"><p class="fiesta-ico">🎉</p><h3>${titulo}</h3><p><b>${esc(detalle)}</b></p><p class="sig">${porra}</p><button class="btn" data-ver>¡Yei! Ver ${uno ? 'el pedido' : 'los pedidos'}</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector('[data-ver]').onclick = () => { el.remove(); alVer && alVer(); };
+  el.onclick = e => { if (e.target === el) el.remove(); };
+  sonido();
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120, 60, 240]); } catch (e) { /* sin vibrar */ }
+  try { if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Lu & Co. 🎉 ' + titulo, { body: `${detalle}. ${porra}` }); } catch (e) { /* sin aviso del sistema */ }
+}
+const VISTO = 'luco-panel-visto';
+function leerVisto() { try { return localStorage.getItem(VISTO); } catch (e) { return null; } }
+function marcarVisto(iso) { try { if (iso && (!leerVisto() || iso > leerVisto())) localStorage.setItem(VISTO, iso); } catch (e) { /* sin almacenamiento */ } }
 
 export async function vPanel(ctx) {
   const { view, store, toast } = ctx;
@@ -24,14 +62,30 @@ export async function vPanel(ctx) {
   let ajustes = ctx.ajustes;
   let pedidos = [];
   try { pedidos = await store.listOrders(); } catch (e) { view.innerHTML = `<p class="warn">No se pudieron leer los pedidos: ${esc(e.message)}</p>`; return; }
+  const irAPedidos = () => { pestana = 'pedidos'; filtro = 'activos'; if (location.hash.startsWith('#panel')) pinta(); };
+  // Pedidos que llegaron desde la última vez que Lu abrió el panel en este aparato
+  const visto = leerVisto(), ultimo = pedidos[0] && pedidos[0].created_at;
+  if (visto) setTimeout(() => festejar(pedidos.filter(o => o.created_at > visto && o.status !== 'Cancelado'), irAPedidos), 400);
+  marcarVisto(ultimo || new Date().toISOString());
+  // En vivo: mientras el panel está abierto
+  if (quitarAviso) quitarAviso();
+  quitarAviso = store.alNuevoPedido(async o => {
+    marcarVisto(o.created_at);
+    try { pedidos = await store.listOrders(); } catch (e) { pedidos = [o, ...pedidos]; }
+    if (location.hash.startsWith('#panel')) pinta();
+    festejar([o], irAPedidos);
+  });
 
   const pinta = () => {
     view.innerHTML = `
       <div class="bar"><h2>Hola, Lu</h2><button class="linkbtn" id="salir">Salir</button></div>
+      ${'Notification' in window && Notification.permission === 'default' ? '<button class="btn small soft" id="avisos">🔔 Avisarme cuando llegue un pedido</button>' : ''}
       <div class="ptabs" role="tablist">${[['resumen', 'Resumen'], ['pedidos', 'Pedidos'], ['tandas', 'Tandas'], ['filamento', 'Filamento']].map(([id, t]) => `<button class="chip" role="tab" data-t="${id}" aria-pressed="${id === pestana}">${t}</button>`).join('')}</div>
       <div id="ptab" style="display:grid;gap:14px"></div>`;
     view.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { pestana = b.dataset.t; pinta(); });
-    view.querySelector('#salir').onclick = async () => { await store.logout(); vPanel(ctx); };
+    view.querySelector('#salir').onclick = async () => { if (quitarAviso) { quitarAviso(); quitarAviso = null; } await store.logout(); vPanel(ctx); };
+    const av = view.querySelector('#avisos');
+    if (av) av.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { /* no se pudo */ } pinta(); };
     const box = view.querySelector('#ptab');
     ({ resumen, pedidos: tabPedidos, tandas, filamento })[pestana](box);
   };
@@ -82,14 +136,17 @@ export async function vPanel(ctx) {
       ${lista.map(o => `
         <div class="card ord" data-id="${o.id}">
           <div class="ordhead"><div><b>${esc(o.code)} · ${esc(o.adult_name)}</b><small>${corta(creado(o))} · ${esc(o.phone)} · ${esc(o.payment || '')}</small></div><span class="st ${o.status}">${o.status}</span></div>
-          <div class="minis">${(o.items || []).map(it => `<span title="${esc(it.nombre)}">${ornSVG(it, 40)}</span><small>×${it.cant}</small>`).join('')}<b style="margin-left:auto">Total ${fmt(o.total)}</b></div>
+          <div class="dlist">${(o.items || []).map((it, idx) => { const m = lugaresDe(it); return `
+            <div class="drow">${ornSVG(it, 44)}<div><b>${esc(nombrePieza(it.forma, it.color))} · "${esc(it.nombre)}"</b><small>×${it.cant}${m === 2 ? ` · 3D, ${it.cant * m} mitades` : ''} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}</small></div>
+            <button class="chip" data-dis="${idx}" aria-label="Bajar el diseño de ${esc(it.nombre)}">⬇ Bajar</button></div>`; }).join('')}</div>
+          <div class="price" style="font-weight:800"><span>Total</span><b style="font-size:1.2rem">${fmt(o.total)}</b></div>
           <div class="grid2">
             <label class="f">Estado<select class="field" data-k="status">${ESTADOS.map(s => `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
             <label class="f">Merma (g)<input class="field" type="number" min="0" inputmode="numeric" data-k="merma" value="${+o.merma || 0}"></label>
           </div>
           ${o.payment === 'Mercado Pago' ? `<label class="f">Liga de pago de Mercado Pago<input class="field" data-k="pay_link" placeholder="https://mpago.la/..." value="${esc(o.pay_link || '')}"></label>` : ''}
           <label class="f">Notas<input class="field" data-k="notes" maxlength="200" value="${esc(o.notes || '')}"></label>
-          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-stl>Descargar piezas (STL)</button><button class="linkbtn" data-del style="margin-left:auto">Borrar pedido</button></div>
+          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-stl>⬇ Bajar todo el pedido</button><button class="linkbtn" data-del style="margin-left:auto">Borrar pedido</button></div>
         </div>`).join('')}
       ${lista.length ? '<p class="hint">Si un pedido real no se hizo, mejor cámbialo a "Cancelado": así cuenta en tu funnel. "Borrar pedido" es para pruebas o errores y no se puede deshacer.</p>' : ''}`;
     box.querySelectorAll('[data-fi]').forEach(b => b.onclick = () => { filtro = b.dataset.fi; pinta(); });
@@ -103,7 +160,8 @@ export async function vPanel(ctx) {
         if (!patch.status_dates[status]) patch.status_dates[status] = hoy();
         try { await store.updateOrder(o.id, patch); toast('Guardado'); await recarga(); } catch (e) { toast('No se guardó: ' + e.message); }
       };
-      card.querySelector('[data-stl]').onclick = () => bajar(unidades([o]), `pedido-${o.code}`);
+      card.querySelector('[data-stl]').onclick = () => bajarPedido(o);
+      card.querySelectorAll('[data-dis]').forEach(b => b.onclick = () => { const it = o.items[+b.dataset.dis]; bajar(todasLasPiezas(o, +b.dataset.dis), `${o.code}-${it.nombre}-${colorDe(it.color).nombre}`.replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]+/g, '_')); });
       const del = card.querySelector('[data-del]'); let armado = false, t = 0;
       del.onclick = async () => {
         if (!armado) { armado = true; del.textContent = `¿Seguro? Toca otra vez para borrar ${o.code}`; t = setTimeout(() => { armado = false; del.textContent = 'Borrar pedido'; }, 4000); return; }
@@ -194,6 +252,20 @@ export async function vPanel(ctx) {
     }
     const inv = ajustes.inventario.find(r => r.color === t.color);
     if (inv) await store.updateInventory(t.color, { grams_left: Math.max(0, inv.grams_left - t.us.length * g) });
+  }
+  // Todas las piezas de un diseño, ya impresas o no (para bajarlo desde el pedido)
+  function todasLasPiezas(o, idx) {
+    const it = o.items[idx], m = lugaresDe(it), out = [];
+    for (let k = 0; k < it.cant * m; k++) out.push({ o, idx, it, pieza: { d: it, lado: m === 2 && k % 2 ? 'espalda' : 'frente' } });
+    return out;
+  }
+  // Todo el pedido, separado por color (cada tanda es de un solo color y lleva hasta 4 piezas)
+  async function bajarPedido(o) {
+    const porColor = {};
+    (o.items || []).forEach((it, idx) => (porColor[it.color] ||= []).push(...todasLasPiezas(o, idx)));
+    const colores = Object.keys(porColor);
+    for (const c of colores) await bajar(porColor[c], `pedido-${o.code}-${colorDe(c).nombre}`);
+    if (colores.length > 1) toast(`Bajé ${colores.length} archivos, uno por color`);
   }
   async function bajar(us, nombre) {
     if (!us.length) { toast('No hay piezas por imprimir en este pedido'); return; }
