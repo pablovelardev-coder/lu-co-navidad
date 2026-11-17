@@ -50,7 +50,7 @@ function vInicio() {
     <div class="cat">${FORMAS.filter(f => f.cat === catInicio).map(f => {
       const [color, nombre] = MUESTRA[f.id];
       const svg = ornSVG({ forma: f.id, color, nombre, letra: 'elegante' }, 88);
-      const precio = f.cat === '3d' ? (venta3d() ? `desde ${fmt(2 * p.p4)} cada una` : 'Muy pronto') : `desde ${fmt(p.p4)} cada una`;
+      const precio = f.cat === '3d' ? (venta3d() ? `desde ${fmt(2 * p.p4)} por figura` : 'Muy pronto') : `desde ${fmt(p.p4)} cada una`;
       return `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>${precio}</span></a>`;
     }).join('')}</div>
     <div class="steps"><div><i>1</i>Diseña</div><div><i>2</i>Pide</div><div><i>3</i>Recibe</div></div>
@@ -131,7 +131,7 @@ async function vDisenar(formaId) {
     $('#precioCard').innerHTML = !d3
       ? `<div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p>`
       : puede
-        ? `<div class="price"><span>Precio por figura</span><b>${fmt(2 * precioUnitario(2, p))}</b></div><p class="hint">Se imprime en dos mitades. Si pides 2 del mismo color, cada una cuesta ${fmt(2 * p.p4)}.</p>`
+        ? `<div class="price"><span>Precio por figura</span><b>${fmt(2 * precioUnitario(2, p))}</b></div><p class="hint">Se imprime en dos mitades. Si pides 2 del mismo color, cada figura cuesta ${fmt(2 * p.p4)}.</p>`
         : `<div class="price"><span>Adornos 3D</span><b>Muy pronto</b></div><p class="hint">Ya la puedes diseñar. Estamos haciendo las primeras para ponerles precio.</p>`;
     $('#agregar').disabled = !puede;
     $('#agregar').textContent = puede ? 'Agregar a mi pedido' : 'Muy pronto';
@@ -197,7 +197,7 @@ function vPedido() {
       <div class="empty">${ornSVG({ forma: 'plana', color: 'rojo', nombre: '¿?', letra: 'elegante' }, 90)}<p>Todavía no tienes esferas en tu pedido.</p><a class="btn small" href="#inicio">Diseñar una esfera</a></div>`;
     return;
   }
-  const q = cotizar(items, p);
+  const q = cotizar(items, p), hay3d = items.some(i => es3dForma(i.forma));
   const datos = leer('luco-datos', { adulto: '', tel: '' });
   view.innerHTML = `
     <div class="bar"><a class="back" href="#inicio" aria-label="Seguir diseñando">‹</a><h2>Mi pedido</h2></div>
@@ -206,13 +206,18 @@ function vPedido() {
         <div class="qty"><button data-menos="${it.id}" aria-label="Una menos">−</button>${it.cant}<button data-mas="${it.id}" aria-label="Una más">+</button></div></div>`).join('')}</div>
     <a class="btn soft" href="#inicio">+ Diseñar otra</a>
     ${q.colores.filter(c => c.faltan).map(c => { const nom = colorDe(c.color).nombre.toLowerCase(), resto = c.lugares % p.porTanda; return `
-      <div class="nudge">${c.lugares > p.porTanda
-        ? `Llevas ${c.lugares} en ${nom}: ${c.lugares - resto} a ${fmt(p.p4)} cada una y ${resto} a ${fmt(c.precioActual)} cada una. Con ${c.faltan} más en ${nom}, todas quedan a ${fmt(p.p4)} cada una.`
-        : `Llevas ${c.lugares} en ${nom}. Con ${c.faltan} más en ${nom} completas tu tanda de 4 y cada una cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`}
-        <div class="meter"><i style="width:${(c.lugares % p.porTanda) / p.porTanda * 100}%"></i></div></div>`; }).join('')}
+      <div class="nudge">${hay3d
+        ? `Llevas ${resto} de 4 lugares de la impresora en ${nom}. Con ${c.faltan} ${c.faltan === 1 ? 'lugar' : 'lugares'} más en ${nom} (un adorno 3D ocupa 2) se llena la tanda y cada lugar cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`
+        : c.lugares > p.porTanda
+          ? `Llevas ${c.lugares} en ${nom}: ${c.lugares - resto} a ${fmt(p.p4)} cada una y ${resto} a ${fmt(c.precioActual)} cada una. Con ${c.faltan} más en ${nom}, todas quedan a ${fmt(p.p4)} cada una.`
+          : `Llevas ${c.lugares} en ${nom}. Con ${c.faltan} más en ${nom} completas tu tanda de 4 y cada una cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`}
+        <div class="meter"><i style="width:${resto / p.porTanda * 100}%"></i></div></div>`; }).join('')}
     <div class="card" style="display:grid;gap:6px">
-      ${q.colores.map(c => `<div class="price" style="font-weight:700;font-size:.92rem"><span>${colorDe(c.color).nombre}: ${c.partes.map(pt => `${pt.cant} ${pt.cant === 1 ? 'esfera' : 'esferas'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada una' : ''}`).join(' + ')}</span><span>${fmt(c.total)}</span></div>`).join('')}
-      <div class="price" style="border-top:1px dashed var(--linea);padding-top:6px"><span>Total · ${items.reduce((s, i) => s + i.cant, 0)} esferas</span><b>${fmt(q.total)}</b></div>
+      ${q.colores.map(c => `<div class="price" style="font-weight:700;font-size:.92rem"><span>${colorDe(c.color).nombre}: ${c.partes.map(pt => hay3d
+        ? `${pt.cant} ${pt.cant === 1 ? 'lugar' : 'lugares'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada uno' : ''}`
+        : `${pt.cant} ${pt.cant === 1 ? 'esfera' : 'esferas'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada una' : ''}`).join(' + ')}</span><span>${fmt(c.total)}</span></div>`).join('')}
+      ${hay3d ? '<p class="hint">Cada adorno 3D ocupa 2 lugares de la impresora, uno por cada mitad.</p>' : ''}
+      <div class="price" style="border-top:1px dashed var(--linea);padding-top:6px"><span>Total · ${items.reduce((s, i) => s + i.cant, 0)} ${hay3d ? 'adornos' : 'esferas'}</span><b>${fmt(q.total)}</b></div>
     </div>
     <form id="formPedido" style="display:grid;gap:12px" novalidate>
       <p class="lbl">Datos de mamá o papá</p>

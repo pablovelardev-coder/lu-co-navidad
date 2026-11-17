@@ -17,8 +17,9 @@ export const CONFIG = {
   // Papá los llena; si quedan vacíos, la app dice que se mandan por WhatsApp.
   pago: { titular: '', clabe: '', banco: '' },
 
-  // Adornos 3D: se pueden diseñar, pero no pedir hasta medir su tanda de prueba y fijar su precio
-  venta3d: false,
+  // Adornos 3D a la venta (Pablo, 17-nov). Precio provisional: cada figura = 2 lugares de la tanda.
+  // Ajustar cuando se pese la tanda de los bisabuelos.
+  venta3d: true,
 
   // Tamaño de las esferas en milímetros (decidido: 5.5 cm, caben 4 por tanda)
   tamanoMm: 55,
