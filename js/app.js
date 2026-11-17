@@ -126,7 +126,7 @@ async function vDisenar(formaId) {
     <div class="card" id="precioCard" style="display:grid;gap:4px"></div>
     <button class="btn" id="agregar">Agregar a mi pedido</button>`;
   const titulo = () => {
-    $('#ttl').textContent = 'Diseña tu ' + formaDe(st.forma).nombre.toLowerCase();
+    $('#ttl').textContent = 'Diseña tu ' + formaDe(st.forma).nombre.replace(/^./, c => c.toLowerCase());
     const d3 = es3dForma(st.forma), puede = !d3 || venta3d();
     $('#precioCard').innerHTML = !d3
       ? `<div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p>`

@@ -78,7 +78,7 @@ export function ornSVG(d, size = 56) {
     arbol: '<polygon points="50,20 88,96 12,96"/><rect x="45" y="95" width="10" height="7"/>',
     muneco: '<circle cx="50" cy="77" r="21"/><circle cx="50" cy="45" r="15"/><rect x="35" y="29" width="30" height="5"/><rect x="40" y="17" width="20" height="14"/>',
     bota: '<path transform="rotate(12 50 60)" d="M29.3 24.7 L56.9 24.7 L56.9 38.5 L54.1 38.5 L55.5 64.8 C56.9 73 67.9 71.7 73.5 79.9 C79 85.5 73.5 92.4 65.2 92.4 C56.9 93 50 93.7 44.5 92.4 C36.2 92.4 32.8 85.5 33.4 78.6 L33.4 38.5 L29.3 38.5 Z"/>',
-    gorro: '<polygon points="20,74 80,74 71,48 60,32 69,24 65,21"/><circle cx="72" cy="24" r="9"/><rect x="13" y="72" width="74" height="21" rx="5"/>',
+    gorro: '<path d="M21 79.9 C19.6 53.7 33.4 26.1 52.8 26.1 C63.8 26.1 72.1 31.6 74.8 38.5 C66.6 42.7 67.9 59.2 79 79.9 Z"/><circle cx="75.5" cy="39.9" r="9"/><rect x="14.1" y="77.2" width="71.8" height="20.7" rx="9.7"/>',
   };
   const alias = { esfera3d: 'plana', estrella3d: 'estrella', corazon3d: 'corazon', arbol3d: 'arbol' };
   const shapes = new Proxy(base, { get: (o, k) => o[alias[k] || k] });
@@ -95,7 +95,7 @@ export function ornSVG(d, size = 56) {
 <circle cx="50" cy="7" r="4" fill="none" stroke="#B8892E" stroke-width="1.6"/><line x1="50" y1="11" x2="50" y2="${top}" stroke="#B8892E"/>
 <g fill="url(#${id})" stroke="${d.color === 'blanco' ? '#ddd' : 'none'}">${shapes[d.forma] || shapes.plana}</g>
 <g clip-path="url(#${id}c)">${seam}<ellipse cx="36" cy="44" rx="13" ry="7" fill="#fff" opacity=".3" transform="rotate(-30 36 44)"/></g>
-<text x="${ {bota: 49}[d.forma] || 50}" y="${ {arbol: 78, arbol3d: 78, muneco: 84, bota: 85, gorro: 88}[d.forma] || 68}" text-anchor="middle" font-family="${font}" font-size="${(fs * ({bota: 0.75, muneco: 0.85}[d.forma] || 1)).toFixed(1)}" fill="${ink}">${name}</text></svg>`;
+<text x="${ {bota: 49}[d.forma] || 50}" y="${ {arbol: 78, arbol3d: 78, muneco: 84, bota: 85, gorro: 92}[d.forma] || 68}" text-anchor="middle" font-family="${font}" font-size="${(fs * ({bota: 0.75, muneco: 0.85}[d.forma] || 1)).toFixed(1)}" fill="${ink}">${name}</text></svg>`;
 }
 function star(cx, cy, R, r) { return Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r : R; return (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1); }).join(' '); }
 function mix(hex, w, amt) { const c = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)); const t = w ? 255 : 0; return '#' + c.map(v => Math.round(v + (t - v) * amt).toString(16).padStart(2, '0')).join(''); }

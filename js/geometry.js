@@ -175,11 +175,21 @@ const SILUETAS_3D = {
     const mv = v => V(v.x - cx, v.y - cy), t = mv(rot(V(2, -14)));
     return { partes: [pts.map(mv)], hoyo: mv(rot(V(-5, 22))), texto: { x: t.x, y: t.y, w: 18, h: 8 } };
   },
-  gorro: () => ({
-    // Punta ancha que llega hasta el pompón (un puente delgado se rompería)
-    partes: [[V(-21, -12), V(21, -12), V(19.5, 6), V(18, 17), V(12, 21), V(3, 11)], circulo(16, 22, 6.5, 40), rect(-26, -26, 26, -11)],
-    hoyo: V(16, 22), texto: { y: -18.5, w: 44, h: 8 },
-  }),
+  // Gorro con curvas (17-nov, "menos cuadrado"): copa abombada que se dobla a la derecha,
+  // punta caída con pompón y ala redondeada. La punta es ancha para no romperse.
+  gorro: () => {
+    const c = new THREE.Shape();
+    c.moveTo(-21, -13);
+    c.bezierCurveTo(-22, 6, -12, 26, 2, 26);   // sube y abomba la copa
+    c.bezierCurveTo(10, 26, 16, 22, 18, 17);   // se dobla hacia la punta
+    c.bezierCurveTo(12, 14, 13, 2, 21, -13);   // por debajo de la punta, de regreso al ala
+    const ala = new THREE.Shape(), r = 7.5;    // ala con orillas redondas
+    ala.moveTo(-26 + r, -26); ala.lineTo(26 - r, -26); ala.absarc(26 - r, -26 + r, r, -Math.PI / 2, 0);
+    ala.lineTo(26, -11 - r); ala.absarc(26 - r, -11 - r, r, 0, Math.PI / 2);
+    ala.lineTo(-26 + r, -11); ala.absarc(-26 + r, -11 - r, r, Math.PI / 2, Math.PI);
+    ala.lineTo(-26, -26 + r); ala.absarc(-26 + r, -26 + r, r, Math.PI, Math.PI * 1.5);
+    return { partes: [limpia(c.getPoints(14)), circulo(18.5, 16, 6.5, 40), limpia(ala.getPoints(8))], hoyo: V(18.5, 16), texto: { y: -18.5, w: 40, h: 8 } };
+  },
 };
 export const es3d = forma => !!SILUETAS_3D[forma];
 
@@ -192,7 +202,8 @@ async function construir3d(d, lado = 'frente') {
   const aC = pts => pts.map(v => ({ X: Math.round(sx * v.x * k * S), Y: Math.round(v.y * k * S) }));
   const desdeC = p => p.map(q => V(q.X / S, q.Y / S));
   const u = new C.Clipper(), silueta = new C.Paths();
-  u.AddPaths(sil.partes.map(aC), C.PolyType.ptSubject, true);
+  // Todas las partes en el mismo sentido: si una va al revés, al unirlas la parte encimada se resta
+  u.AddPaths(sil.partes.map(p => aC(ccw(p))), C.PolyType.ptSubject, true);
   u.Execute(C.ClipType.ctUnion, silueta, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
   const hoyo = aC(circulo(sil.hoyo.x, sil.hoyo.y, R_HOYO / k, 32));
   // Silueta encogida 'inset' mm, menos el hoyo (el hoyo no se agranda en las capas de arriba)
@@ -202,7 +213,10 @@ async function construir3d(d, lado = 'frente') {
     const c = new C.Clipper(), t = new C.PolyTree();
     c.AddPaths(paths, C.PolyType.ptSubject, true); c.AddPath(hoyo, C.PolyType.ptClip, true);
     c.Execute(C.ClipType.ctDifference, t, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
-    return C.JS.PolyTreeToExPolygons(t).filter(e => e.outer.length >= 3).map(e => forma(desdeC(e.outer), e.holes.filter(h => h.length >= 3).map(desdeC)));
+    // Limpia puntos casi repetidos y quita astillas diminutas (se forman en uniones angostas al encoger)
+    const limpio = p => C.JS.Clean(p, 0.02 * S), grande = p => p.length >= 3 && Math.abs(C.JS.AreaOfPolygon(p, S)) > 0.5;
+    return C.JS.PolyTreeToExPolygons(t).map(e => ({ outer: limpio(e.outer), holes: e.holes.map(limpio).filter(grande) }))
+      .filter(e => grande(e.outer)).map(e => forma(desdeC(e.outer), e.holes.map(desdeC)));
   };
   const grupo = new THREE.Group();
   grupo.add(new THREE.Mesh(extruir(capa(0), BASE_3D, 0)));
