@@ -95,7 +95,7 @@ grant execute on function public.order_status(text) to anon, authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 
 insert into public.settings (id, prices) values
-  (1, '{"p4":60,"cv":25,"rollo":276,"gramos":9,"otros":5,"porTanda":4}')
+  (1, '{"p4":60,"cv":25,"rollo":276,"gramos":11.5,"otros":5,"porTanda":4}')
 on conflict (id) do nothing;
 
 insert into public.inventory (color, sort) values

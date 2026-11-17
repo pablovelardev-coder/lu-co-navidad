@@ -6,7 +6,7 @@ export const PRECIOS_BASE = {
   p4: 60,        // precio por esfera con la tanda llena
   cv: 25,        // % de la ganancia de los lugares vacíos que se cobra
   rollo: 276,    // precio de un rollo de 200 g (reposición, Amazon MX)
-  gramos: 9,     // gramos por esfera de 5.5 cm (estimado: pesar la primera)
+  gramos: 11.5,  // gramos por esfera incluyendo merma (tanda de prueba 16-nov: 8 g pieza + 3.5 g merma)
   otros: 5,      // hilo, listón y luz por esfera
   porTanda: 4,   // lugares en la cama de 12 x 12 cm
 };
