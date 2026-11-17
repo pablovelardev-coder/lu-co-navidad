@@ -81,7 +81,7 @@ export async function vPanel(ctx) {
       ${lista.map(o => `
         <div class="card ord" data-id="${o.id}">
           <div class="ordhead"><div><b>${esc(o.code)} · ${esc(o.adult_name)}</b><small>${corta(creado(o))} · ${esc(o.phone)} · ${esc(o.payment || '')}</small></div><span class="st ${o.status}">${o.status}</span></div>
-          <div class="minis">${(o.items || []).map(it => `<span title="${esc(it.nombre)}">${ornSVG(it, 40)}</span><small>×${it.cant}</small>`).join('')}<b style="margin-left:auto">${fmt(o.total)}</b></div>
+          <div class="minis">${(o.items || []).map(it => `<span title="${esc(it.nombre)}">${ornSVG(it, 40)}</span><small>×${it.cant}</small>`).join('')}<b style="margin-left:auto">Total ${fmt(o.total)}</b></div>
           <div class="grid2">
             <label class="f">Estado<select class="field" data-k="status">${ESTADOS.map(s => `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
             <label class="f">Merma (g)<input class="field" type="number" min="0" inputmode="numeric" data-k="merma" value="${+o.merma || 0}"></label>

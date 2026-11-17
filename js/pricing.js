@@ -31,7 +31,11 @@ export function cotizar(items, p) {
     const llenas = Math.floor(n / p.porTanda), resto = n % p.porTanda;
     const t = llenas * p.porTanda * p.p4 + (resto ? resto * precioUnitario(resto, p) : 0);
     total += t;
-    return { color, lugares: n, total: t, faltan: resto ? p.porTanda - resto : 0, precioActual: resto ? precioUnitario(resto, p) : p.p4 };
+    // Desglose para mostrar: cuántas esferas van a cada precio por esfera
+    const partes = [];
+    if (llenas) partes.push({ cant: llenas * p.porTanda, cu: p.p4 });
+    if (resto) partes.push({ cant: resto, cu: precioUnitario(resto, p) });
+    return { color, lugares: n, total: t, partes, faltan: resto ? p.porTanda - resto : 0, precioActual: resto ? precioUnitario(resto, p) : p.p4 };
   });
   return { total, colores };
 }

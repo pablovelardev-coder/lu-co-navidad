@@ -30,6 +30,7 @@ async function ruta() {
     if (nombre === 'disenar') return await vDisenar(arg);
     if (nombre === 'pedido') return vPedido();
     if (nombre === 'seguimiento') return await vSeguimiento(arg);
+    if (nombre === 'compartir') return await vCompartir();
     if (nombre === 'panel') { const m = await import('./panel.js'); return await m.vPanel({ view, store, ajustes, toast, recargar: cargarAjustes }); }
     return vInicio();
   } catch (e) { console.error(e); view.innerHTML = `<p class="warn">Algo falló: ${esc(e.message)}. Intenta otra vez.</p>`; }
@@ -46,15 +47,59 @@ function vInicio() {
       const svg = ornSVG({ forma: f.id, color, nombre, letra: 'elegante' }, f.pronto ? 70 : 88);
       return f.pronto
         ? `<div class="pcard wide off">${svg}<div><span class="badge">Muy pronto</span><br><b>${f.nombre}</b><br><span>${f.nota}</span></div></div>`
-        : `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>desde ${fmt(p.p4)}</span></a>`;
+        : `<a class="pcard" href="#disenar/${f.id}">${svg}<b>${f.nombre}</b><span>desde ${fmt(p.p4)} cada una</span></a>`;
     }).join('')}</div>
     <div class="steps"><div><i>1</i>Diseña</div><div><i>2</i>Pide</div><div><i>3</i>Recibe</div></div>
     <div class="card" style="display:grid;gap:10px">
-      <p class="lbl">Precio por esfera, según cuántas del mismo color</p>
-      <div class="ladder">${escalera(p).map(e => `<div class="${e.n === 4 ? 'best' : ''}"><b>${fmt(e.cu)}</b>${e.n === 4 ? '4 o más' : e.n === 1 ? '1 sola' : e.n + ' iguales'}</div>`).join('')}</div>
-      <p class="hint">La impresora hace 4 esferas a la vez, de un mismo color. Si juntan 4 del mismo color, cada una sale más barata.</p>
+      <p class="lbl">Precio de cada esfera</p>
+      <div class="ladder">${escalera(p).map(e => `<div class="${e.n === 4 ? 'best' : ''}"><b>${fmt(e.cu)}</b>cada una<br>${e.n === 4 ? 'si pides 4 o más' : e.n === 1 ? 'si pides 1' : `si pides ${e.n}`}</div>`).join('')}</div>
+      <p class="hint">El precio es por esfera y baja cuando pides varias del mismo color, porque la impresora hace 4 a la vez de un solo color.</p>
     </div>
-    <a class="btn soft" href="#seguimiento">¿Cómo va mi pedido?</a>`;
+    <a class="btn soft" href="#seguimiento">¿Cómo va mi pedido?</a>
+    <a class="btn gold" href="#compartir">Comparte Lu &amp; Co. con tus amigas</a>`;
+}
+
+/* ---------- compartir: QR y mensaje ---------- */
+async function vCompartir() {
+  const url = CONFIG.urlApp, texto = `${CONFIG.mensajeCompartir} ${url}`;
+  view.innerHTML = `
+    <div class="bar"><a class="back" href="#inicio" aria-label="Regresar">‹</a><h2>Comparte Lu &amp; Co.</h2></div>
+    <div class="card" style="display:grid;gap:10px;justify-items:center;text-align:center">
+      <div id="qr" style="width:min(260px,100%);aspect-ratio:1/1" role="img" aria-label="Código QR de la app"></div>
+      <p class="hint">Que lo escaneen con la cámara del celular.</p>
+    </div>
+    <button class="btn" id="compartir">Compartir por mensaje</button>
+    <a class="btn soft" id="whats" href="https://wa.me/?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">Mandar por WhatsApp</a>
+    <div class="card" style="display:grid;gap:8px"><p class="lbl">El mensaje</p><p id="msg"></p><button class="linkbtn" id="copiar" style="justify-self:start">Copiar mensaje</button></div>
+    <button class="btn soft" id="bajarQR">Descargar el QR (para la tarjetita)</button>`;
+  $('#msg').textContent = texto;
+  let svg = '';
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/+esm');
+    const qrcode = mod.default || mod;
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    svg = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true }).replace(/fill="black"/g, 'fill="#5C1229"');
+    $('#qr').innerHTML = svg;
+    $('#qr svg').setAttribute('width', '100%'); $('#qr svg').setAttribute('height', '100%');
+  } catch (e) { console.error(e); $('#qr').innerHTML = `<p class="warn">No se pudo dibujar el QR. La liga es: ${esc(url)}</p>`; }
+  $('#compartir').onclick = async () => {
+    if (navigator.share) { try { await navigator.share({ title: 'Lu & Co. Navidad', text: CONFIG.mensajeCompartir, url }); } catch (e) { /* canceló */ } }
+    else location.href = $('#whats').href;
+  };
+  $('#copiar').onclick = async () => {
+    try { await navigator.clipboard.writeText(texto); toast('Mensaje copiado'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($('#msg')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Selecciona y copia el mensaje'); }
+  };
+  $('#bajarQR').onclick = async () => {
+    if (!svg) return;
+    const img = new Image(), lado = 1200;
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = c.height = lado;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, lado, lado); ctx.drawImage(img, 0, 0, lado, lado);
+      c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'qr-lu-co-navidad.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }, 'image/png');
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  };
 }
 
 /* ---------- diseñar ---------- */
@@ -71,7 +116,7 @@ async function vDisenar(formaId) {
     <p class="warn" id="aviso" hidden></p>
     <div class="tabs" role="tablist">${['Forma', 'Color', 'Nombre', 'Adorno'].map((t, i) => `<button role="tab" data-tab="${i}" aria-selected="${i === pestana}">${t}</button>`).join('')}</div>
     <div id="panelTab" style="display:grid;gap:12px"></div>
-    <div class="price"><span>1 sola ${fmt(precioUnitario(1, p))} · 4 del mismo color</span><b>${fmt(p.p4)} c/u</b></div>
+    <div class="card" style="display:grid;gap:4px"><div class="price"><span>Precio por esfera</span><b>${fmt(precioUnitario(1, p))}</b></div><p class="hint">Si pides 4 del mismo color, cada una cuesta ${fmt(p.p4)}.</p></div>
     <button class="btn" id="agregar">Agregar a mi pedido</button>`;
   const titulo = () => { $('#ttl').textContent = 'Diseña tu ' + formaDe(st.forma).nombre.toLowerCase(); };
   titulo();
@@ -140,10 +185,15 @@ function vPedido() {
       <div class="item">${ornSVG(it, 56)}<div class="nm">${nombreItem(it)}<small>${detalleItem(it)}</small></div>
         <div class="qty"><button data-menos="${it.id}" aria-label="Una menos">−</button>${it.cant}<button data-mas="${it.id}" aria-label="Una más">+</button></div></div>`).join('')}</div>
     <a class="btn soft" href="#inicio">+ Diseñar otra</a>
-    ${q.colores.filter(c => c.faltan).map(c => { const nom = colorDe(c.color).nombre.toLowerCase(); return `
-      <div class="nudge">Llevas ${c.lugares % p.porTanda} en ${nom}. Con ${c.faltan} más en ${nom} completas tu tanda de 4 y cada una cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.
+    ${q.colores.filter(c => c.faltan).map(c => { const nom = colorDe(c.color).nombre.toLowerCase(), resto = c.lugares % p.porTanda; return `
+      <div class="nudge">${c.lugares > p.porTanda
+        ? `Llevas ${c.lugares} en ${nom}: ${c.lugares - resto} a ${fmt(p.p4)} cada una y ${resto} a ${fmt(c.precioActual)} cada una. Con ${c.faltan} más en ${nom}, todas quedan a ${fmt(p.p4)} cada una.`
+        : `Llevas ${c.lugares} en ${nom}. Con ${c.faltan} más en ${nom} completas tu tanda de 4 y cada una cuesta ${fmt(p.p4)} en vez de ${fmt(c.precioActual)}.`}
         <div class="meter"><i style="width:${(c.lugares % p.porTanda) / p.porTanda * 100}%"></i></div></div>`; }).join('')}
-    <div class="price"><span>${items.reduce((s, i) => s + i.cant, 0)} esferas</span><b>${fmt(q.total)}</b></div>
+    <div class="card" style="display:grid;gap:6px">
+      ${q.colores.map(c => `<div class="price" style="font-weight:700;font-size:.92rem"><span>${colorDe(c.color).nombre}: ${c.partes.map(pt => `${pt.cant} ${pt.cant === 1 ? 'esfera' : 'esferas'} a ${fmt(pt.cu)}${pt.cant > 1 ? ' cada una' : ''}`).join(' + ')}</span><span>${fmt(c.total)}</span></div>`).join('')}
+      <div class="price" style="border-top:1px dashed var(--linea);padding-top:6px"><span>Total · ${items.reduce((s, i) => s + i.cant, 0)} esferas</span><b>${fmt(q.total)}</b></div>
+    </div>
     <form id="formPedido" style="display:grid;gap:12px" novalidate>
       <p class="lbl">Datos de mamá o papá</p>
       <label class="f" for="adulto">Nombre<input class="field" id="adulto" required maxlength="60" autocomplete="name" placeholder="Mamá de Sofi" value="${esc(datos.adulto)}"></label>
@@ -195,10 +245,10 @@ async function vSeguimiento(code) {
   let pago = '';
   if (o.status === 'Nuevo') pago = '<div class="card">Luciana va a revisar tu pedido. Cuando lo acepte, aquí aparecen los datos para pagar.</div>';
   else if (o.status === 'Aceptado') {
-    if (o.payment === 'Efectivo al entregar') pago = `<div class="card"><b>Pagas al recibir tus esferas</b><br>Total: ${fmt(o.total)}</div>`;
+    if (o.payment === 'Efectivo al entregar') pago = `<div class="card"><b>Pagas al recibir tus esferas</b><br>Total del pedido: ${fmt(o.total)}</div>`;
     else if (o.pay_link) pago = `<a class="btn gold" href="${esc(o.pay_link)}" target="_blank" rel="noopener">Pagar ${fmt(o.total)} con Mercado Pago</a>`;
-    else if (CONFIG.pago.clabe) pago = `<div class="card"><b>Transferencia</b><br>Total: ${fmt(o.total)}<br>${esc(CONFIG.pago.banco)} · ${esc(CONFIG.pago.titular)}<br>CLABE: <b>${esc(CONFIG.pago.clabe)}</b><br><span class="hint">Pon tu código ${esc(o.code)} como concepto.</span></div>`;
-    else pago = `<div class="card"><b>Total: ${fmt(o.total)}</b><br>Papá te manda los datos para pagar por WhatsApp.</div>`;
+    else if (CONFIG.pago.clabe) pago = `<div class="card"><b>Transferencia</b><br>Total del pedido: ${fmt(o.total)}<br>${esc(CONFIG.pago.banco)} · ${esc(CONFIG.pago.titular)}<br>CLABE: <b>${esc(CONFIG.pago.clabe)}</b><br><span class="hint">Pon tu código ${esc(o.code)} como concepto.</span></div>`;
+    else pago = `<div class="card"><b>Total del pedido: ${fmt(o.total)}</b><br>Papá te manda los datos para pagar por WhatsApp.</div>`;
   }
   box.innerHTML = `
     <div class="code"><small>Tu código</small><b>${esc(o.code)}</b><small>Guárdalo para ver cómo va</small></div>
