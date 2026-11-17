@@ -157,9 +157,10 @@ const SILUETAS_3D = {
     hoyo: V(0, 26), texto: { y: -11.5, w: 20, h: 8 },
     detalles: [circulo(-3.5, 13.5, 1.15, 14), circulo(3.5, 13.5, 1.15, 14), [V(-0.8, 10.6), V(6.5, 9.4), V(-0.8, 8.2)]],
   }),
+  // Pie grande de talón a punta (17-nov: "muy chico el pie"); el nombre va en el pie
   bota: () => ({
-    partes: [rect(-14, -12, 8, 20), circulo(5, -15, 12, 64), rect(-14, -27, 5, -12), rect(-16.5, 17, 10.5, 28)],
-    hoyo: V(-3, 23.5), texto: { y: 3, w: 15, h: 8 },
+    partes: [rect(-21, 18, 3, 28), rect(-18, -12, 0, 19), circulo(-9, -18, 9.5, 48), rect(-9, -27.5, 12, -8.5), circulo(12, -18, 9.5, 48)],
+    hoyo: V(-9, 23.5), texto: { x: 1.5, y: -18, w: 30, h: 9 },
   }),
   gorro: () => ({
     // Punta ancha que llega hasta el pompón (un puente delgado se rompería)
@@ -207,7 +208,7 @@ async function construir3d(d, lado = 'frente') {
     if (w > 0 && h > 0) {
       const size = 10 * Math.min(sil.texto.w * k / w, sil.texto.h * k / h);
       const bb = font.getPath(texto, 0, 0, size).getBoundingBox();
-      const dx = -(bb.x1 + bb.x2) / 2, dy = sil.texto.y * k + (bb.y1 + bb.y2) / 2;
+      const dx = -(bb.x1 + bb.x2) / 2 + sx * (sil.texto.x || 0) * k, dy = sil.texto.y * k + (bb.y1 + bb.y2) / 2;
       let formas;
       // En las 3D el nombre es más chico: engrosar la mitad para que no se tapen los huecos de las letras
       try { formas = await formasTextoGruesas(font, texto, size, (ENGROSAR[d.letra] ?? 0) / 2); }

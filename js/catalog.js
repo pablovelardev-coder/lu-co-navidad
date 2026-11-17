@@ -77,12 +77,12 @@ export function ornSVG(d, size = 56) {
     corazon: '<path d="M50 99 C18 75, 9 55, 22 38 C32 26, 46 29, 50 42 C54 29, 68 26, 78 38 C91 55, 82 75, 50 99 Z"/>',
     arbol: '<polygon points="50,20 88,96 12,96"/><rect x="45" y="95" width="10" height="7"/>',
     muneco: '<circle cx="50" cy="77" r="21"/><circle cx="50" cy="45" r="15"/><rect x="35" y="29" width="30" height="5"/><rect x="40" y="17" width="20" height="14"/>',
-    bota: '<rect x="30" y="22" width="30" height="50"/><circle cx="57" cy="83" r="17"/><rect x="30" y="66" width="27" height="34"/><rect x="27" y="16" width="37" height="15" rx="3"/>',
+    bota: '<rect x="21" y="23" width="33" height="14" rx="3"/><rect x="25" y="36" width="25" height="43"/><circle cx="37.6" cy="86.8" r="13.1"/><rect x="37.6" y="73.7" width="29" height="26.2"/><circle cx="66.6" cy="86.8" r="13.1"/>',
     gorro: '<polygon points="20,74 80,74 71,48 60,32 69,24 65,21"/><circle cx="72" cy="24" r="9"/><rect x="13" y="72" width="74" height="21" rx="5"/>',
   };
   const alias = { esfera3d: 'plana', estrella3d: 'estrella', corazon3d: 'corazon', arbol3d: 'arbol' };
   const shapes = new Proxy(base, { get: (o, k) => o[alias[k] || k] });
-  const top = { plana: 24, estrella: 20, corazon: 35, arbol: 20, muneco: 17, bota: 16, gorro: 15 }[alias[d.forma] || d.forma] || 24;
+  const top = { plana: 24, estrella: 20, corazon: 35, arbol: 20, muneco: 17, bota: 23, gorro: 15 }[alias[d.forma] || d.forma] || 24;
   const fill = c.hex
     ? `<radialGradient id="${id}" cx="36%" cy="32%" r="78%"><stop offset="0" stop-color="${mix(c.hex, 1, .45)}"/><stop offset=".55" stop-color="${c.hex}"/><stop offset="1" stop-color="${mix(c.hex, 0, .35)}"/></radialGradient>`
     : `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7c6d9"/><stop offset=".35" stop-color="#c9e4f6"/><stop offset=".65" stop-color="#d8f3d0"/><stop offset="1" stop-color="#e3cdf5"/></linearGradient>`;
@@ -95,7 +95,7 @@ export function ornSVG(d, size = 56) {
 <circle cx="50" cy="7" r="4" fill="none" stroke="#B8892E" stroke-width="1.6"/><line x1="50" y1="11" x2="50" y2="${top}" stroke="#B8892E"/>
 <g fill="url(#${id})" stroke="${d.color === 'blanco' ? '#ddd' : 'none'}">${shapes[d.forma] || shapes.plana}</g>
 <g clip-path="url(#${id}c)">${seam}<ellipse cx="36" cy="44" rx="13" ry="7" fill="#fff" opacity=".3" transform="rotate(-30 36 44)"/></g>
-<text x="${ {bota: 45}[d.forma] || 50}" y="${ {arbol: 78, arbol3d: 78, muneco: 84, bota: 52, gorro: 88}[d.forma] || 68}" text-anchor="middle" font-family="${font}" font-size="${(fs * ({bota: 0.7, muneco: 0.85}[d.forma] || 1)).toFixed(1)}" fill="${ink}">${name}</text></svg>`;
+<text x="${ {bota: 52}[d.forma] || 50}" y="${ {arbol: 78, arbol3d: 78, muneco: 84, bota: 92, gorro: 88}[d.forma] || 68}" text-anchor="middle" font-family="${font}" font-size="${(fs * ({bota: 0.85, muneco: 0.85}[d.forma] || 1)).toFixed(1)}" fill="${ink}">${name}</text></svg>`;
 }
 function star(cx, cy, R, r) { return Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r : R; return (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1); }).join(' '); }
 function mix(hex, w, amt) { const c = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)); const t = w ? 255 : 0; return '#' + c.map(v => Math.round(v + (t - v) * amt).toString(16).padStart(2, '0')).join(''); }
