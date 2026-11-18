@@ -10,11 +10,11 @@ export const PRECIOS_BASE = {
   otros: 5,      // hilo, listón y luz por esfera
   porTanda: 4,   // lugares en la cama de 12 x 12 cm
   // Adornos 3D de una pieza (17-nov). Chica de 6.6 cm: 2 por charola.
-  p3d: 100,       // chica: precio por figura con la charola llena (2 del mismo color)
+  p3d: 60,        // chica: precio por figura con la charola llena (2 del mismo color) — Pablo, 17-nov
   gramos3d: 11,   // chica: bota 7 g y gorro 14 g sin merma (prueba 17-nov)
   porTanda3d: 2,  // chica: figuras por charola
-  // Grande de ~11.5 cm: 1 por charola (la estrella tarda 1:20 h). 50% más que la chica.
-  p3dG: 150,
+  // Grande de ~11.5 cm: 1 por charola (la estrella tarda 1:20 h).
+  p3dG: 90,       // grande — Pablo, 17-nov (antes $150)
   gramos3dG: 30,  // promedio de GRAMOS_GRANDE (para cuentas generales)
 };
 // Gramos por figura grande: la estrella de 11.5 cm pesó 20 g (17-nov) = 0.50 g por cm³ de volumen;
