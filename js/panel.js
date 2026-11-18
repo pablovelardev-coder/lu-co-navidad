@@ -1,6 +1,6 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
 import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
-import { lugaresDe, tipoDe, confTipo, tamano, MEDIDA } from './pricing.js';
+import { lugaresDe, tipoDe, confTipo, gramosDe, tamano, MEDIDA } from './pricing.js';
 import { correoRecordado } from './store.js';
 import { CONFIG } from './config.js';
 
@@ -303,15 +303,15 @@ export async function vPanel(ctx) {
     });
   }
   async function marcarImpresa(t) {
-    const g = confTipo(t.tipo, ajustes.precios).gramos, porPedido = new Map();
-    for (const u of t.us) { const m = porPedido.get(u.o.id) || { o: u.o, items: u.o.items.map(i => ({ ...i })), n: 0 }; m.items[u.idx].impresas = (m.items[u.idx].impresas || 0) + 1; m.n++; porPedido.set(u.o.id, m); }
-    for (const { o, items, n } of porPedido.values()) {
+    const porPedido = new Map(), gramos = u => gramosDe(u.it, ajustes.precios);
+    for (const u of t.us) { const m = porPedido.get(u.o.id) || { o: u.o, items: u.o.items.map(i => ({ ...i })), n: 0 }; m.items[u.idx].impresas = (m.items[u.idx].impresas || 0) + 1; m.g = (m.g || 0) + gramos(u); porPedido.set(u.o.id, m); }
+    for (const { o, items, g } of porPedido.values()) {
       const todo = items.every(i => (i.impresas || 0) >= i.cant), status = todo ? 'Listo' : 'Imprimiendo';
       const sd = { ...(o.status_dates || {}) }; if (!sd.Imprimiendo) sd.Imprimiendo = hoy(); if (todo && !sd.Listo) sd.Listo = hoy();
-      await store.updateOrder(o.id, { items, status, status_dates: sd, grams: (+o.grams || 0) + n * g });
+      await store.updateOrder(o.id, { items, status, status_dates: sd, grams: (+o.grams || 0) + g });
     }
     const inv = ajustes.inventario.find(r => r.color === t.color);
-    if (inv) await store.updateInventory(t.color, { grams_left: Math.max(0, inv.grams_left - t.us.length * g) });
+    if (inv) await store.updateInventory(t.color, { grams_left: Math.max(0, inv.grams_left - t.us.reduce((s, u) => s + gramos(u), 0)) });
   }
   // Todas las piezas de un diseño, ya impresas o no (para bajarlo desde el pedido)
   function todasLasPiezas(o, idx) {
