@@ -2,7 +2,7 @@
 import { store } from './store.js';
 import { CONFIG } from './config.js';
 import { COLORES, FORMAS, CATEGORIAS, ADORNOS, LETRAS, PAGOS, PASOS_CLIENTE, MAX_LETRAS, colorDe, formaDe, es3dForma, nombrePieza, ornSVG, esc, ARCOIRIS_CSS } from './catalog.js';
-import { PRECIOS_BASE, cotizar, escalera, precioUnitario, precio3d, tamano, MEDIDA } from './pricing.js';
+import { PRECIOS_BASE, cotizar, escalera, precioUnitario, precio3d, tamano, MEDIDA, medidaDe } from './pricing.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
@@ -19,7 +19,7 @@ const carrito = { get: () => leer('luco-carrito', []), set: v => { guardar('luco
 function contador() { $('#cartCount').textContent = carrito.get().reduce((s, i) => s + i.cant, 0); }
 function disponible(id) { const r = ajustes.inventario.find(x => x.color === id); return !r || (r.available && r.grams_left >= ajustes.precios.gramos); }
 const nombreItem = it => nombrePieza(it.forma, it.color);
-const detalleItem = it => `"${esc(it.nombre)}" · ${es3dForma(it.forma) ? `3D ${tamano(it)}, ${MEDIDA[tamano(it)]}` : (ADORNOS.find(a => a.id === it.adorno)?.nombre.toLowerCase() || 'lisa')} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}`;
+const detalleItem = it => `"${esc(it.nombre)}" · ${es3dForma(it.forma) ? `3D ${tamano(it)}, ${medidaDe(it)}` : (ADORNOS.find(a => a.id === it.adorno)?.nombre.toLowerCase() || 'lisa')} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}`;
 const venta3d = () => !!CONFIG.venta3d;
 
 /* ---------- rutas ---------- */
@@ -183,14 +183,14 @@ async function vDisenar(formaId) {
       : puede
         ? `<p class="lbl">Tamaño</p>${chipsTam()}
            <div class="price"><span>Precio por adorno ${tamano(st)}</span><b>${fmt(precio3d(1, p, tamano(st)))}</b></div>
-           <p class="hint">${tamano(st) === 'grande' ? `Mide unos ${MEDIDA.grande}, la más grande que cabe en la impresora.` : `Mide unos ${MEDIDA.chica}. Si pides 2 chicas del mismo color, cada una cuesta ${fmt(p.p3d)}.`}</p>`
+           <p class="hint">${tamano(st) === 'grande' ? `Mide unos ${medidaDe({ ...st, tam: 'grande' })}${medidaDe({ ...st, tam: 'grande' }) === '11.5 cm' ? ', la más grande que cabe en la impresora' : ''}.` : `Mide unos ${MEDIDA.chica}. Si pides 2 chicas del mismo color, cada una cuesta ${fmt(p.p3d)}.`}</p>`
         : `<div class="price"><span>Adornos 3D</span><b>Muy pronto</b></div><p class="hint">Ya la puedes diseñar. Estamos haciendo las primeras para ponerles precio.</p>`;
     $('#precioCard').querySelectorAll('[data-tam]').forEach(b => b.onclick = () => ponTam(b.dataset.tam));
     $('#agregar').disabled = !puede;
     $('#agregar').textContent = puede ? 'Agregar a mi pedido' : 'Muy pronto';
   };
   function chipsTam() {
-    return `<div class="chips">${[['grande', `Grande · ${MEDIDA.grande} · ${fmt(precio3d(1, p, 'grande'))}`], ['chica', `Chica · ${MEDIDA.chica} · ${fmt(precio3d(1, p, 'chica'))}`]].map(([id, t]) => `<button class="chip" data-tam="${id}" aria-pressed="${tamano(st) === id}">${t}</button>`).join('')}</div>`;
+    return `<div class="chips">${[['grande', `Grande · ${medidaDe({ ...st, tam: 'grande' })} · ${fmt(precio3d(1, p, 'grande'))}`], ['chica', `Chica · ${MEDIDA.chica} · ${fmt(precio3d(1, p, 'chica'))}`]].map(([id, t]) => `<button class="chip" data-tam="${id}" aria-pressed="${tamano(st) === id}">${t}</button>`).join('')}</div>`;
   }
   function ponTam(t) { st.tam = t; titulo(); if (pestana === 3) pintaPestana(); redibuja(); }
   titulo();

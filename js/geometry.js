@@ -271,15 +271,17 @@ async function nombreFormas(d, sil, k) {
 // en la charola (lado mayor ≈ GRANDE_MM, 1 por charola, 1:20 h la estrella).
 // op = { tam: 'chica' | 'grande' | mm, texto: {x, y, w, h} en mm de 55 para cambiar la zona del nombre }
 export const GRANDE_MM = 115;
+// Las redondas y llenas gastan el doble a la misma medida: su grande es de 9.5 cm (Pablo, 17-nov)
+export const GRANDE_MM_FORMA = { esfera3d: 95, corazon3d: 95, gorro: 95 };
 export const tamanoDe = it => (it && it.tam === 'chica' ? 'chica' : 'grande');
 function mmDe(sil, tam) {
   if (typeof tam === 'number') return tam;
   if (tam !== 'grande') return TAM_3D;
   const pts = sil.partes.flat(), xs = pts.map(v => v.x), ys = pts.map(v => v.y);
-  return 55 * GRANDE_MM / Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  return 55 * (GRANDE_MM_FORMA[sil.id] || GRANDE_MM) / Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
 }
 async function construir3dUna(d, op = {}) {
-  const sil = SILUETAS_3D[d.forma](), tamOp = op.tam ?? tamanoDe(d);
+  const sil = { ...SILUETAS_3D[d.forma](), id: d.forma }, tamOp = op.tam ?? tamanoDe(d);
   const C = await cargarClipper(), S = 1000, tam = mmDe(sil, tamOp), k = tam / 55, avisos = [];
   if (tamOp === 'grande' && sil.textoG) sil.texto = { ...sil.texto, ...sil.textoG };
   if (op.texto) sil.texto = { ...sil.texto, ...op.texto };

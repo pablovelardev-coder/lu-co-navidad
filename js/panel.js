@@ -1,6 +1,6 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
 import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
-import { lugaresDe, tipoDe, confTipo, gramosDe, tamano, MEDIDA } from './pricing.js';
+import { lugaresDe, tipoDe, confTipo, gramosDe, tamano, medidaDe } from './pricing.js';
 import { correoRecordado } from './store.js';
 import { CONFIG } from './config.js';
 
@@ -198,7 +198,7 @@ export async function vPanel(ctx) {
         <div class="card ord" data-id="${o.id}">
           <div class="ordhead"><div><b>${esc(o.code)} · ${esc(o.adult_name)}</b><small>${corta(creado(o))} · ${esc(o.phone)} · ${esc(o.payment || '')}</small></div><span class="st ${o.status}">${o.status}</span></div>
           <div class="dlist">${(o.items || []).map((it, idx) => { const m = lugaresDe(it); return `
-            <div class="drow">${ornSVG(it, 44)}<div><b>${esc(nombrePieza(it.forma, it.color))} · "${esc(it.nombre)}"</b><small>×${it.cant}${tipoDe(it) !== 'plana' ? ` · 3D ${tamano(it)} (${MEDIDA[tamano(it)]})` : ''} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}</small></div>
+            <div class="drow">${ornSVG(it, 44)}<div><b>${esc(nombrePieza(it.forma, it.color))} · "${esc(it.nombre)}"</b><small>×${it.cant}${tipoDe(it) !== 'plana' ? ` · 3D ${tamano(it)} (${medidaDe(it)})` : ''} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}</small></div>
             <button class="chip" data-dis="${idx}" aria-label="Bajar el diseño de ${esc(it.nombre)}">⬇ Bajar</button></div>`; }).join('')}</div>
           <div class="price" style="font-weight:800"><span>Total</span><b style="font-size:1.2rem">${fmt(o.total)}</b></div>
           <div class="grid2">

@@ -15,11 +15,11 @@ export const PRECIOS_BASE = {
   porTanda3d: 2,  // chica: figuras por charola
   // Grande de ~11.5 cm: 1 por charola (la estrella tarda 1:20 h).
   p3dG: 90,       // grande — Pablo, 17-nov (antes $150)
-  gramos3dG: 30,  // promedio de GRAMOS_GRANDE (para cuentas generales)
+  gramos3dG: 23,  // promedio de GRAMOS_GRANDE (para cuentas generales)
 };
 // Gramos por figura grande: la estrella de 11.5 cm pesó 20 g (17-nov) = 0.50 g por cm³ de volumen;
 // las demás se calculan con su volumen. Solo la estrella está pesada.
-export const GRAMOS_GRANDE = { estrella3d: 20, muneco: 20, bota: 18, arbol3d: 25, corazon3d: 40, gorro: 41, esfera3d: 43 };
+export const GRAMOS_GRANDE = { estrella3d: 20, muneco: 20, bota: 18, arbol3d: 25, corazon3d: 25, gorro: 26, esfera3d: 28 }; // redondas a 9.5 cm
 const GR_ROLLO = 200;
 
 export const costoVariable = p => p.rollo / GR_ROLLO * p.gramos + p.otros;
@@ -39,7 +39,10 @@ export const tipoDe = item => (es3d(item) ? '3d-' + tamano(item) : 'plana'); // 
 export const lugaresDe = () => 1;
 // Gramos de una pieza (para descontar filamento al imprimir)
 export const gramosDe = (item, p) => tipoDe(item) === '3d-grande' ? (GRAMOS_GRANDE[item.forma] || p.gramos3dG) : confTipo(tipoDe(item), p).gramos;
-export const MEDIDA = { 'chica': '6.6 cm', 'grande': '11.5 cm' };
+export const MEDIDA = { 'chica': '6.6 cm', 'grande': '9.5 a 11.5 cm' };
+// La grande de las redondas (esfera, corazón, gorro) es de 9.5 cm; las demás de 11.5 cm
+const GRANDE_CM = { esfera3d: '9.5 cm', corazon3d: '9.5 cm', gorro: '9.5 cm' };
+export const medidaDe = item => (tamano(item) === 'chica' ? MEDIDA.chica : GRANDE_CM[item.forma] || '11.5 cm');
 
 // La misma regla de tandas aplicada a cada tipo
 export function confTipo(tipo, p) {
