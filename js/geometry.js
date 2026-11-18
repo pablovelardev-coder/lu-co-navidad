@@ -149,7 +149,7 @@ const PINO = [[0, 29], [26.5, -23], [5, -23], [5, -26.5], [-5, -26.5], [-5, -23]
 // Medidas en mm para 55 mm. texto = zona plana de arriba donde va el nombre.
 const SILUETAS_3D = {
   esfera3d: () => ({ partes: [circulo(0, 0, 27.5, 96)], hoyo: V(0, 21), texto: { y: -1, w: 40, h: 12 } }),
-  estrella3d: () => ({ partes: [estrella(0, 0, 29, 13.5)], hoyo: V(0, 17.5), texto: { y: -2, w: 17, h: 7 } }),
+  estrella3d: () => ({ partes: [estrella(0, 0, 29, 13.5)], hoyo: V(0, 17.5), texto: { y: -2, w: 17, h: 7 }, textoG: { y: 1, w: 30, h: 9 } }),
   corazon3d: () => ({ partes: [corazon(0, 0, 55)], hoyo: V(0, 7.5), texto: { y: -5, w: 28, h: 9 } }),
   arbol3d: () => ({ partes: [PINO], hoyo: V(0, 17), texto: { y: -11, w: 24, h: 8 } }),
   muneco: () => ({
@@ -247,6 +247,135 @@ async function construir3d(d, lado = 'frente') {
   if (sil.detalles) grupo.add(new THREE.Mesh(extruir(sil.detalles.map(p => forma(p.map(v => V(sx * v.x * k, v.y * k)))), ALTO_DETALLE_3D, arriba - 0.1)));
   return { grupo, hoyo: V(sx * sil.hoyo.x * k, sil.hoyo.y * k), avisos };
 }
+/* ---------- adornos 3D de UNA pieza (propuesta 17-nov, después de la prueba de pegado) ---------- */
+// Las mitades salieron un poquito curvas y no embonaban. Una sola pieza no se pega:
+// abajo un bisel a 45° (se imprime sin soportes y se ve redondeada por detrás), una pared corta
+// y el abombado arriba. El nombre va en relieve al frente y hundido (en espejo) por detrás,
+// para que se lea de los dos lados. Más grande (TAM_3D) y caben 2 por charola.
+const TAM_3D = 66, BISEL = 1.2, PASOS_BISEL = 4, PARED = 0.8, CAPAS_1 = 14, HUNDIDO = 0.8;
+async function nombreFormas(d, sil, k) {
+  const texto = (d.nombre || '').trim();
+  if (!texto) return null;
+  const font = await cargarFuente(d.letra);
+  const b = font.getPath(texto, 0, 0, 10).getBoundingBox(), w = b.x2 - b.x1, h = b.y2 - b.y1;
+  if (!(w > 0 && h > 0)) return null;
+  const size = 10 * Math.min(sil.texto.w * k / w, sil.texto.h * k / h);
+  const bb = font.getPath(texto, 0, 0, size).getBoundingBox();
+  let formas;
+  try { formas = await formasTextoGruesas(font, texto, size, (ENGROSAR[d.letra] ?? 0) / 2 + 0.1); }
+  catch (e) { formas = formasTexto(font, texto, size); }
+  // centro del texto en la figura (mm) y centro de las letras en sus propias coordenadas
+  return { formas, cx: (sil.texto.x || 0) * k, cy: sil.texto.y * k, gx: (bb.x1 + bb.x2) / 2, gy: (bb.y1 + bb.y2) / 2, alto: bb.y2 - bb.y1 };
+}
+// Dos tamaños (Pablo, 17-nov): chica = TAM_3D (2 por charola) y grande = lo más grande que cabe
+// en la charola (lado mayor ≈ GRANDE_MM, 1 por charola, 1:20 h la estrella).
+// op = { tam: 'chica' | 'grande' | mm, texto: {x, y, w, h} en mm de 55 para cambiar la zona del nombre }
+export const GRANDE_MM = 115;
+export const tamanoDe = it => (it && it.tam === 'chica' ? 'chica' : 'grande');
+function mmDe(sil, tam) {
+  if (typeof tam === 'number') return tam;
+  if (tam !== 'grande') return TAM_3D;
+  const pts = sil.partes.flat(), xs = pts.map(v => v.x), ys = pts.map(v => v.y);
+  return 55 * GRANDE_MM / Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+}
+async function construir3dUna(d, op = {}) {
+  const sil = SILUETAS_3D[d.forma](), tamOp = op.tam ?? tamanoDe(d);
+  const C = await cargarClipper(), S = 1000, tam = mmDe(sil, tamOp), k = tam / 55, avisos = [];
+  if (tamOp === 'grande' && sil.textoG) sil.texto = { ...sil.texto, ...sil.textoG };
+  if (op.texto) sil.texto = { ...sil.texto, ...op.texto };
+  // Más grande = un poco más abombada (el domo crece con la raíz del tamaño, para no gastar de más)
+  const fD = Math.sqrt(tam / TAM_3D), DOMO_1 = 4.8 * fD, R_DOMO_1 = 4.8 * fD;
+  const aC = pts => pts.map(v => ({ X: Math.round(v.x * k * S), Y: Math.round(v.y * k * S) }));
+  const desdeC = p => p.map(q => V(q.X / S, q.Y / S));
+  const u = new C.Clipper(), silueta = new C.Paths();
+  u.AddPaths(sil.partes.map(p => aC(ccw(p))), C.PolyType.ptSubject, true);
+  u.Execute(C.ClipType.ctUnion, silueta, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+  const hoyo = aC(circulo(sil.hoyo.x, sil.hoyo.y, R_HOYO / k, 32));
+  const nom = await nombreFormas(d, sil, k);
+  // Nombre de atrás: letras en espejo (para leerse al voltear la pieza), en clipper
+  let atras = null;
+  if (nom && nom.formas.length) {
+    atras = [];
+    for (const f of nom.formas) {
+      const conv = pts => pts.map(v => ({ X: Math.round((nom.cx - (v.x - nom.gx)) * S), Y: Math.round((nom.cy + v.y + nom.gy) * S) }));
+      atras.push(conv(f.getPoints(8)));
+      f.holes.forEach(hh => atras.push(conv(hh.getPoints(8))));
+    }
+  }
+  const limpio = p => C.JS.Clean(p, 0.02 * S), grande = p => p.length >= 3 && Math.abs(C.JS.AreaOfPolygon(p, S)) > 0.3;
+  const capa = (inset, conNombreAtras = false) => {
+    let paths = silueta;
+    if (inset > 0) { const o = new C.ClipperOffset(2, 0.02 * S); paths = new C.Paths(); o.AddPaths(silueta, C.JoinType.jtRound, C.EndType.etClosedPolygon); o.Execute(paths, -inset * S); }
+    // primero quita el hoyo; luego, si toca, el nombre hundido (relleno par-impar respeta los huecos de las letras)
+    let c = new C.Clipper(), sinHoyo = new C.Paths();
+    c.AddPaths(paths, C.PolyType.ptSubject, true); c.AddPath(hoyo, C.PolyType.ptClip, true);
+    c.Execute(C.ClipType.ctDifference, sinHoyo, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+    const t = new C.PolyTree(); c = new C.Clipper();
+    c.AddPaths(sinHoyo, C.PolyType.ptSubject, true);
+    if (conNombreAtras && atras) c.AddPaths(atras, C.PolyType.ptClip, true);
+    c.Execute(C.ClipType.ctDifference, t, C.PolyFillType.pftNonZero, C.PolyFillType.pftEvenOdd);
+    return C.JS.PolyTreeToExPolygons(t).map(e => ({ outer: limpio(e.outer), holes: e.holes.map(limpio).filter(grande) }))
+      .filter(e => grande(e.outer)).map(e => forma(desdeC(e.outer), e.holes.map(desdeC)));
+  };
+  const grupo = new THREE.Group(), capaZ = (f, z0, z1) => f.length && grupo.add(new THREE.Mesh(extruir(f, z1 - z0 + 0.02, z0 - 0.01)));
+  // Bisel de abajo: de BISEL mm hacia adentro en la cama hasta la orilla completa
+  for (let i = 0; i < PASOS_BISEL; i++) {
+    const z0 = i * BISEL / PASOS_BISEL, z1 = (i + 1) * BISEL / PASOS_BISEL;
+    capaZ(capa(BISEL - (i + 0.5) * BISEL / PASOS_BISEL, z0 < HUNDIDO - 1e-6), i ? z0 : 0, z1);
+  }
+  capaZ(capa(0, BISEL < HUNDIDO), BISEL, BISEL + PARED);
+  const z00 = BISEL + PARED;
+  for (let i = 0; i < CAPAS_1; i++) {
+    const t0 = i / CAPAS_1 * Math.PI / 2, t1 = (i + 1) / CAPAS_1 * Math.PI / 2;
+    const f = capa(R_DOMO_1 * (1 - Math.cos((t0 + t1) / 2)));
+    if (!f.length) break;
+    capaZ(f, z00 + DOMO_1 * Math.sin(t0), z00 + DOMO_1 * Math.sin(t1));
+  }
+  const arriba = z00 + DOMO_1;
+  if (nom && nom.formas.length) {
+    grupo.add(new THREE.Mesh(extruir(nom.formas, ALTO_LETRA_3D, arriba - 0.1, nom.cx - nom.gx, nom.cy + nom.gy)));
+    if (nom.alto < LETRA_CHICA * k * 0.85) avisos.push('El nombre queda chiquito para esta figura. Prueben uno más corto.');
+  }
+  if (sil.detalles) grupo.add(new THREE.Mesh(extruir(sil.detalles.map(p => forma(p.map(v => V(v.x * k, v.y * k)))), ALTO_DETALLE_3D, arriba - 0.1)));
+  return { grupo, hoyo: V(sil.hoyo.x * k, sil.hoyo.y * k), avisos, huella: silueta.map(p => p.map(q => ({ X: q.X, Y: q.Y }))), alto: arriba + ALTO_LETRA_3D };
+}
+// Acomoda 2 piezas de una sola pieza en la charola de 120 × 120 (lado a lado, una arriba de otra o en diagonal).
+export async function stlPar3d(disenos, cama = 118, aire = 3, op = {}) {
+  const C = await cargarClipper(), S = 1000;
+  const piezas = await Promise.all(disenos.slice(0, 2).map(x => construir3dUna(x.d || x, op)));
+  disenos = disenos.map(x => x.d || x);
+  const caja = p => { const xs = p.huella.flat().map(q => q.X / S), ys = p.huella.flat().map(q => q.Y / S); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }; };
+  const cs = piezas.map(caja), W = c => c.x1 - c.x0, H = c => c.y1 - c.y0;
+  let pos;
+  if (piezas.length === 1) pos = [[-(cs[0].x0 + cs[0].x1) / 2, -(cs[0].y0 + cs[0].y1) / 2]];
+  else {
+    const [a, b] = cs;
+    const lado = W(a) + W(b) + aire <= cama && Math.max(H(a), H(b)) <= cama;
+    const arriba = H(a) + H(b) + aire <= cama && Math.max(W(a), W(b)) <= cama;
+    if (lado) { const x0 = -(W(a) + W(b) + aire) / 2; pos = [[x0 - a.x0, -(a.y0 + a.y1) / 2], [x0 + W(a) + aire - b.x0, -(b.y0 + b.y1) / 2]]; }
+    else if (arriba) { const y0 = -(H(a) + H(b) + aire) / 2; pos = [[-(a.x0 + a.x1) / 2, y0 + H(b) + aire - a.y0], [-(b.x0 + b.x1) / 2, y0 - b.y0]]; }
+    else {
+      // diagonal: una en la esquina de arriba a la izquierda y otra abajo a la derecha; revisa que no se encimen
+      const m = cama / 2;
+      pos = [[-m - a.x0, m - a.y1], [m - b.x1, -m - b.y0]];
+      const mueve = (p, [dx, dy]) => p.map(path => path.map(q => ({ X: q.X + Math.round(dx * S), Y: q.Y + Math.round(dy * S) })));
+      const o = new C.ClipperOffset(), gordaA = new C.Paths(); o.AddPaths(mueve(piezas[0].huella, pos[0]), C.JoinType.jtRound, C.EndType.etClosedPolygon); o.Execute(gordaA, aire * S);
+      const c = new C.Clipper(), cruce = new C.Paths();
+      c.AddPaths(gordaA, C.PolyType.ptSubject, true); c.AddPaths(mueve(piezas[1].huella, pos[1]), C.PolyType.ptClip, true);
+      c.Execute(C.ClipType.ctIntersection, cruce, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+      if (cruce.length) throw new Error('Estas dos figuras no caben juntas en la charola');
+    }
+  }
+  const raiz = new THREE.Group();
+  piezas.forEach((p, i) => { p.grupo.position.set(pos[i][0], pos[i][1], 0); raiz.add(p.grupo); });
+  raiz.updateMatrixWorld(true);
+  const data = new STLExporter().parse(raiz, { binary: true });
+  const info = piezas.map((p, i) => ({ nombre: disenos[i].nombre, ancho: +W(cs[i]).toFixed(1), largo: +H(cs[i]).toFixed(1), alto: +p.alto.toFixed(1), volumen: Math.round(volumenMm3(p.grupo)) }));
+  raiz.traverse(o => o.geometry && o.geometry.dispose());
+  return { blob: new Blob([data], { type: 'model/stl' }), info };
+}
+export { construir3dUna };
+
 // Para ver la figura completa: las dos mitades pegadas espalda con espalda.
 async function construir3dArmado(d) {
   const [f, e] = await Promise.all([construir3d(d, 'frente'), construir3d(d, 'espalda')]);
@@ -255,7 +384,7 @@ async function construir3dArmado(d) {
   return { grupo: g, hoyo: f.hoyo, avisos: f.avisos };
 }
 // Una pieza para imprimir. En las 3D, cada mitad es una pieza aparte (ocupa un lugar).
-export function construirPieza(d, lado = 'frente') { return es3d(d.forma) ? construir3d(d, lado) : construir(d); }
+export function construirPieza(d, lado = 'frente') { return es3d(d.forma) ? construir3dUna(d) : construir(d); }
 
 /* ---------- ganchos impresos (idea de Luciana, 17-nov) ---------- */
 // Gancho en S: la curva grande se cuelga de la rama y la chica entra por el hoyo de 3.5 mm.
@@ -302,7 +431,7 @@ const extruir = (formas, alto, z, dx = 0, dy = 0) => {
 };
 
 export async function construir(d) {
-  if (es3d(d.forma)) return construir3dArmado(d);
+  if (es3d(d.forma)) return construir3dUna(d);
   const S = CONFIG.tamanoMm, pf = perfil(d.forma, S), avisos = [];
   const grupo = new THREE.Group();
   grupo.add(new THREE.Mesh(extruir([forma(pf.contorno, [circulo(pf.hoyo.x, pf.hoyo.y, R_HOYO)])], GROSOR, 0)));
@@ -400,10 +529,14 @@ export function crearVisor(canvas) {
     mostrar({ grupo, hoyo }, colorId) {
       if (actual) { pivote.remove(actual); actual.traverse(o => o.geometry && o.geometry.dispose()); }
       grupo.traverse(o => { if (o.isMesh) o.material = material(colorId); });
+      // Las piezas grandes se encogen en pantalla para que quepan (el tamaño real se dice en texto)
+      const caja = new THREE.Box3().setFromObject(grupo), tam = caja.getSize(new THREE.Vector3());
+      const esc = Math.min(1, 56 / Math.max(tam.x, tam.y, 1));
       const listón = new THREE.Mesh(new THREE.TorusGeometry(6, 0.55, 12, 40), dorado);
       listón.rotation.y = Math.PI / 2; listón.position.set(hoyo.x, hoyo.y + 4.2, GROSOR / 2);
       grupo.add(listón);
-      grupo.position.set(0, -2, -GROSOR / 2);
+      grupo.scale.setScalar(esc);
+      grupo.position.set(0, -2, -Math.min(tam.z, 6) / 2 * esc);
       actual = grupo; pivote.add(grupo);
     },
     destruir() { cancelAnimationFrame(raf); if (actual) actual.traverse(o => o.geometry && o.geometry.dispose()); renderer.dispose(); },

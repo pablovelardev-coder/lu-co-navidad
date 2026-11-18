@@ -9,10 +9,13 @@ export const PRECIOS_BASE = {
   gramos: 11.5,  // gramos por esfera incluyendo merma (tanda de prueba 16-nov: 8 g pieza + 3.5 g merma)
   otros: 5,      // hilo, listón y luz por esfera
   porTanda: 4,   // lugares en la cama de 12 x 12 cm
-  // Adornos 3D (17-nov): 2 figuras por tanda (4 mitades), 1:30 h con relleno 10%.
-  p3d: 100,       // precio por figura con la tanda llena (2 del mismo color)
-  gramos3d: 20,   // ESTIMADO por figura con merma; pesar la tanda de los bisabuelos y corregir
-  porTanda3d: 2,  // figuras 3D por tanda
+  // Adornos 3D de una pieza (17-nov). Chica de 6.6 cm: 2 por charola.
+  p3d: 100,       // chica: precio por figura con la charola llena (2 del mismo color)
+  gramos3d: 11,   // chica: bota 7 g y gorro 14 g sin merma (prueba 17-nov)
+  porTanda3d: 2,  // chica: figuras por charola
+  // Grande de ~11.5 cm: 1 por charola (la estrella tarda 1:20 h). 50% más que la chica.
+  p3dG: 150,
+  gramos3dG: 30,  // ESTIMADO (estrella de 11.5 cm); pesar y corregir
 };
 const GR_ROLLO = 200;
 
@@ -24,27 +27,35 @@ export function precioUnitario(n, p) {
   return Math.round((p.p4 + c * (p.porTanda - n) / n * (p.p4 - costoVariable(p))) / 5) * 5;
 }
 
-// Los adornos 3D se imprimen en 2 mitades (en el panel cada mitad cuenta como una pieza).
+// Adornos 3D de una pieza, en dos tamaños. Cada pieza ocupa su lugar en la charola:
+// planas 4 por charola, 3D chica 2 y 3D grande 1. Sin tamaño guardado = grande.
 const FORMAS_3D = ['esfera3d', 'estrella3d', 'corazon3d', 'arbol3d', 'muneco', 'bota', 'gorro'];
 export const es3d = item => FORMAS_3D.includes(item.forma);
-export const lugaresDe = item => (es3d(item) ? 2 : 1);
+export const tamano = item => (item.tam === 'chica' ? 'chica' : 'grande');
+export const tipoDe = item => (es3d(item) ? '3d-' + tamano(item) : 'plana'); // 'plana' | '3d-chica' | '3d-grande'
+export const lugaresDe = () => 1;
+export const MEDIDA = { 'chica': '6.6 cm', 'grande': '11.5 cm' };
 
-// La misma regla de tandas aplicada a los 3D: tanda de 2 figuras a p3d.
-const conf3d = p => ({ ...p, p4: p.p3d, gramos: p.gramos3d, porTanda: p.porTanda3d });
-export const precio3d = (n, p) => precioUnitario(n, conf3d(p));
+// La misma regla de tandas aplicada a cada tipo
+export function confTipo(tipo, p) {
+  if (tipo === '3d-chica') return { ...p, p4: p.p3d, gramos: p.gramos3d, porTanda: p.porTanda3d };
+  if (tipo === '3d-grande') return { ...p, p4: p.p3dG, gramos: p.gramos3dG, porTanda: 1 };
+  return p;
+}
+export const precio3d = (n, p, tam = 'chica') => precioUnitario(n, confTipo('3d-' + tam, p));
 
-// Cotiza un carrito: agrupa por color y tipo (esferas planas o adornos 3D), porque cada tanda
-// es de un solo color y las planas y las 3D se imprimen en tandas distintas.
+// Cotiza un carrito: agrupa por color y tipo, porque cada charola es de un solo color
+// y las planas, las 3D chicas y las 3D grandes se imprimen en charolas distintas.
 export function cotizar(items, p) {
   const grupos = {};
   for (const it of items) {
-    const k = it.color + (es3d(it) ? '|3d' : '');
-    grupos[k] = grupos[k] || { color: it.color, es3d: es3d(it), n: 0 };
+    const tipo = tipoDe(it), k = it.color + '|' + tipo;
+    grupos[k] = grupos[k] || { color: it.color, tipo, n: 0 };
     grupos[k].n += it.cant;
   }
   let total = 0;
-  const colores = Object.values(grupos).map(({ color, es3d: d3, n }) => {
-    const c = d3 ? conf3d(p) : p, llenas = Math.floor(n / c.porTanda), resto = n % c.porTanda;
+  const colores = Object.values(grupos).map(({ color, tipo, n }) => {
+    const d3 = tipo !== 'plana', c = confTipo(tipo, p), llenas = Math.floor(n / c.porTanda), resto = n % c.porTanda;
     const cuResto = resto ? precioUnitario(resto, c) : c.p4;
     const t = llenas * c.porTanda * c.p4 + resto * cuResto;
     total += t;
@@ -52,7 +63,7 @@ export function cotizar(items, p) {
     const partes = [];
     if (llenas) partes.push({ cant: llenas * c.porTanda, cu: c.p4 });
     if (resto) partes.push({ cant: resto, cu: cuResto });
-    return { color, es3d: d3, n, resto, porTanda: c.porTanda, mejor: c.p4, total: t, partes, faltan: resto ? c.porTanda - resto : 0, precioActual: cuResto };
+    return { color, tipo, tam: d3 ? tipo.slice(3) : null, es3d: d3, n, resto, porTanda: c.porTanda, mejor: c.p4, total: t, partes, faltan: resto ? c.porTanda - resto : 0, precioActual: cuResto };
   });
   return { total, colores };
 }

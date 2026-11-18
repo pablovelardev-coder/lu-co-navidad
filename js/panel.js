@@ -1,6 +1,6 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
 import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
-import { lugaresDe } from './pricing.js';
+import { lugaresDe, tipoDe, confTipo, tamano, MEDIDA } from './pricing.js';
 import { correoRecordado } from './store.js';
 import { CONFIG } from './config.js';
 
@@ -198,7 +198,7 @@ export async function vPanel(ctx) {
         <div class="card ord" data-id="${o.id}">
           <div class="ordhead"><div><b>${esc(o.code)} · ${esc(o.adult_name)}</b><small>${corta(creado(o))} · ${esc(o.phone)} · ${esc(o.payment || '')}</small></div><span class="st ${o.status}">${o.status}</span></div>
           <div class="dlist">${(o.items || []).map((it, idx) => { const m = lugaresDe(it); return `
-            <div class="drow">${ornSVG(it, 44)}<div><b>${esc(nombrePieza(it.forma, it.color))} · "${esc(it.nombre)}"</b><small>×${it.cant}${m === 2 ? ` · 3D, ${it.cant * m} mitades` : ''} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}</small></div>
+            <div class="drow">${ornSVG(it, 44)}<div><b>${esc(nombrePieza(it.forma, it.color))} · "${esc(it.nombre)}"</b><small>×${it.cant}${tipoDe(it) !== 'plana' ? ` · 3D ${tamano(it)} (${MEDIDA[tamano(it)]})` : ''} · letra ${it.letra === 'redondita' ? 'redondita' : 'elegante'}</small></div>
             <button class="chip" data-dis="${idx}" aria-label="Bajar el diseño de ${esc(it.nombre)}">⬇ Bajar</button></div>`; }).join('')}</div>
           <div class="price" style="font-weight:800"><span>Total</span><b style="font-size:1.2rem">${fmt(o.total)}</b></div>
           <div class="grid2">
@@ -234,29 +234,28 @@ export async function vPanel(ctx) {
   }
 
   /* ----- Tandas ----- */
-  // Una unidad = un lugar en la cama. Solo esferas pagadas que faltan por imprimir.
-  // Las 3D se imprimen en 2 mitades: cada mitad es una unidad (frente y espalda) e 'impresas' cuenta mitades.
+  // Una unidad = una pieza en la charola. Solo pagadas que faltan por imprimir.
+  // Charolas por tipo: planas de 4, 3D chicas de 2 y 3D grandes de 1 (todas de un solo color).
+  const cupo = t => ({ plana: 4, '3d-chica': 2, '3d-grande': 1 })[t];
+  const nombreTipo = t => ({ plana: 'Planas', '3d-chica': '3D chicas', '3d-grande': '3D grande' })[t];
   function unidades(lista) {
     const out = [];
     for (const o of lista) (o.items || []).forEach((it, idx) => {
-      const mitades = lugaresDe(it), hechas = it.impresas || 0, faltan = it.cant * mitades - hechas;
-      for (let k = 0; k < faltan; k++) {
-        const lado = mitades === 2 ? ((hechas + k) % 2 === 0 ? 'frente' : 'espalda') : 'frente';
-        out.push({ o, idx, it, lado, pieza: { d: it, lado } });
-      }
+      const faltan = it.cant - (it.impresas || 0);
+      for (let k = 0; k < faltan; k++) out.push({ o, idx, it, tipo: tipoDe(it), pieza: { d: it, lado: 'frente' } });
     });
     return out;
   }
   function porImprimir() {
     const pagados = pedidos.filter(o => o.status === 'Pagado' || o.status === 'Imprimiendo').sort((a, b) => a.created_at.localeCompare(b.created_at));
     const grupos = {};
-    for (const u of unidades(pagados)) (grupos[u.it.color] ||= []).push(u);
+    for (const u of unidades(pagados)) (grupos[u.it.color + '|' + u.tipo] ||= []).push(u);
     const tandas = [];
-    for (const [color, us] of Object.entries(grupos)) for (let i = 0; i < us.length; i += 4) tandas.push({ color, us: us.slice(i, i + 4) });
+    for (const us of Object.values(grupos)) { const c = cupo(us[0].tipo); for (let i = 0; i < us.length; i += c) tandas.push({ color: us[0].it.color, tipo: us[0].tipo, cupo: c, us: us.slice(i, i + c) }); }
     return tandas;
   }
   function resumenTandas() {
-    return porImprimir().map(t => `<div class="card row" style="justify-content:space-between"><span><b>${colorDe(t.color).nombre}</b> · ${t.us.length} de 4 lugares${t.us.length < 4 ? ` · faltan ${4 - t.us.length}` : ''}</span><span class="st ${t.us.length === 4 ? 'Listo' : ''}">${t.us.length === 4 ? 'Lista' : 'Esperando'}</span></div>`).join('');
+    return porImprimir().map(t => `<div class="card row" style="justify-content:space-between"><span><b>${colorDe(t.color).nombre}</b> · ${nombreTipo(t.tipo)} · ${t.us.length} de ${t.cupo}${t.us.length < t.cupo ? ` · falta ${t.cupo - t.us.length}` : ''}</span><span class="st ${t.us.length === t.cupo ? 'Listo' : ''}">${t.us.length === t.cupo ? 'Lista' : 'Esperando'}</span></div>`).join('');
   }
   function tandas(box) {
     const ts = porImprimir();
@@ -276,7 +275,7 @@ export async function vPanel(ctx) {
           <li>Pon el rollo del <b>color de la tanda</b> e imprime.</li>
           <li>Mira las primeras capas: si una punta se levanta, cancela y vuelve a poner la orilla.</li>
           <li>Al terminar, toca <b>Ya se imprimió</b>. La app pasa los pedidos a "Listo" y descuenta el filamento.</li>
-          <li><b>Adornos 3D:</b> pega cada figura espalda con espalda, con un palillo en el hoyo para alinear las mitades. El pegamento instantáneo lo pone un adulto.</li>
+          <li><b>Adornos 3D:</b> son de una sola pieza, no se pegan. La <b>grande</b> va sola en la charola (la estrella tarda 1:20 h); las <b>chicas</b> van de 2 en 2.</li>
         </ol>
         <p class="hint">Si pesas las piezas o la merma, anótalo en el pedido (campo Merma). Los nombres de los menús pueden variar un poco en la app del iPad.</p>
       </details>
@@ -284,9 +283,9 @@ export async function vPanel(ctx) {
       <div class="card row" style="justify-content:space-between"><span><b>Ganchos impresos</b><br><small class="hint">15 ganchos en S por tanda, para colgar las esferas</small></span><button class="btn small soft" id="bajarGanchos">Descargar tanda de ganchos</button></div>
       ${ts.map((t, i) => `
         <div class="card tanda" data-i="${i}">
-          <div class="ordhead"><b>${colorDe(t.color).nombre} · ${t.us.length} de 4</b><span class="st ${t.us.length === 4 ? 'Listo' : ''}">${t.us.length === 4 ? 'Llena' : 'Faltan ' + (4 - t.us.length)}</span></div>
+          <div class="ordhead"><b>${colorDe(t.color).nombre} · ${nombreTipo(t.tipo)} · ${t.us.length} de ${t.cupo}</b><span class="st ${t.us.length === t.cupo ? 'Listo' : ''}">${t.us.length === t.cupo ? 'Llena' : 'Falta ' + (t.cupo - t.us.length)}</span></div>
           <div class="minis">${t.us.map(u => `<span title="${esc(u.o.code)}">${ornSVG(u.it, 44)}</span>`).join('')}</div>
-          <p class="hint">${[...new Set(t.us.map(u => u.o.code))].map(esc).join(', ')}${t.us.length < 4 ? ' · Pueden esperar otro pedido de este color o imprimirla así.' : ''}</p>
+          <p class="hint">${[...new Set(t.us.map(u => u.o.code))].map(esc).join(', ')}${t.us.length < t.cupo ? ' · Pueden esperar otro pedido de este color o imprimirla así.' : ''}</p>
           <div class="row"><button class="btn small" data-bajar>Descargar tanda (STL)</button><button class="btn small soft" data-lista>Ya se imprimió</button></div>
         </div>`).join('')}`;
     box.querySelector('#bajarGanchos').onclick = async () => {
@@ -296,7 +295,7 @@ export async function vPanel(ctx) {
     };
     box.querySelectorAll('.tanda').forEach(card => {
       const t = ts[+card.dataset.i];
-      card.querySelector('[data-bajar]').onclick = () => bajar(t.us, `tanda-${t.color}-${hoy()}`);
+      card.querySelector('[data-bajar]').onclick = () => bajar(t.us, `tanda-${t.tipo}-${t.color}-${hoy()}`);
       card.querySelector('[data-lista]').onclick = async e => {
         e.target.disabled = true;
         try { await marcarImpresa(t); toast('¡Tanda lista!'); await recarga(); } catch (err) { e.target.disabled = false; toast('No se guardó: ' + err.message); }
@@ -304,10 +303,10 @@ export async function vPanel(ctx) {
     });
   }
   async function marcarImpresa(t) {
-    const g = ajustes.precios.gramos, porPedido = new Map();
+    const g = confTipo(t.tipo, ajustes.precios).gramos, porPedido = new Map();
     for (const u of t.us) { const m = porPedido.get(u.o.id) || { o: u.o, items: u.o.items.map(i => ({ ...i })), n: 0 }; m.items[u.idx].impresas = (m.items[u.idx].impresas || 0) + 1; m.n++; porPedido.set(u.o.id, m); }
     for (const { o, items, n } of porPedido.values()) {
-      const todo = items.every(i => (i.impresas || 0) >= i.cant * lugaresDe(i)), status = todo ? 'Listo' : 'Imprimiendo';
+      const todo = items.every(i => (i.impresas || 0) >= i.cant), status = todo ? 'Listo' : 'Imprimiendo';
       const sd = { ...(o.status_dates || {}) }; if (!sd.Imprimiendo) sd.Imprimiendo = hoy(); if (todo && !sd.Listo) sd.Listo = hoy();
       await store.updateOrder(o.id, { items, status, status_dates: sd, grams: (+o.grams || 0) + n * g });
     }
@@ -316,28 +315,33 @@ export async function vPanel(ctx) {
   }
   // Todas las piezas de un diseño, ya impresas o no (para bajarlo desde el pedido)
   function todasLasPiezas(o, idx) {
-    const it = o.items[idx], m = lugaresDe(it), out = [];
-    for (let k = 0; k < it.cant * m; k++) out.push({ o, idx, it, pieza: { d: it, lado: m === 2 && k % 2 ? 'espalda' : 'frente' } });
+    const it = o.items[idx], out = [];
+    for (let k = 0; k < it.cant; k++) out.push({ o, idx, it, tipo: tipoDe(it), pieza: { d: it, lado: 'frente' } });
     return out;
   }
-  // Todo el pedido, separado por color (cada tanda es de un solo color y lleva hasta 4 piezas)
+  // Todo el pedido, separado por color y tipo (cada charola es de un solo color y un solo tipo)
   async function bajarPedido(o) {
-    const porColor = {};
-    (o.items || []).forEach((it, idx) => (porColor[it.color] ||= []).push(...todasLasPiezas(o, idx)));
-    const colores = Object.keys(porColor);
-    for (const c of colores) await bajar(porColor[c], `pedido-${o.code}-${colorDe(c).nombre}`);
-    if (colores.length > 1) toast(`Bajé ${colores.length} archivos, uno por color`);
+    const grupos = {};
+    (o.items || []).forEach((it, idx) => (grupos[it.color + '|' + tipoDe(it)] ||= []).push(...todasLasPiezas(o, idx)));
+    let archivos = 0;
+    for (const us of Object.values(grupos)) archivos += await bajar(us, `pedido-${o.code}-${colorDe(us[0].it.color).nombre}-${us[0].tipo}`);
+    if (archivos > 1) toast(`Bajé ${archivos} archivos: uno por charola`);
   }
   async function bajar(us, nombre) {
-    if (!us.length) { toast('No hay piezas por imprimir en este pedido'); return; }
+    if (!us.length) { toast('No hay piezas por imprimir en este pedido'); return 0; }
     toast('Preparando el archivo…');
     try {
       const geo = await import('./geometry.js');
-      for (let i = 0; i < us.length; i += 4) {
-        const blob = await geo.stlDe(us.slice(i, i + 4).map(u => u.pieza));
-        geo.descargar(blob, `${nombre}${us.length > 4 ? '-' + (i / 4 + 1) : ''}.stl`);
+      const tipo = us[0].tipo || tipoDe(us[0].it), c = cupo(tipo);
+      let n = 0;
+      for (let i = 0; i < us.length; i += c) {
+        const grupo = us.slice(i, i + c);
+        const blob = tipo === 'plana' ? await geo.stlDe(grupo.map(u => u.pieza)) : (await geo.stlPar3d(grupo.map(u => u.it))).blob;
+        geo.descargar(blob, `${nombre}${us.length > c ? '-' + (i / c + 1) : ''}.stl`);
+        n++;
       }
-    } catch (e) { console.error(e); toast('No se pudo crear el archivo: ' + e.message); }
+      return n;
+    } catch (e) { console.error(e); toast('No se pudo crear el archivo: ' + e.message); return 0; }
   }
 
   /* ----- Filamento ----- */
