@@ -337,7 +337,9 @@ export async function vPanel(ctx) {
       for (let i = 0; i < us.length; i += c) {
         const grupo = us.slice(i, i + c);
         const blob = tipo === 'plana' ? await geo.stlDe(grupo.map(u => u.pieza)) : (await geo.stlPar3d(grupo.map(u => u.it))).blob;
-        geo.descargar(blob, `${nombre}${us.length > c ? '-' + (i / c + 1) : ''}.stl`);
+        // El nombre del archivo dice de quién son las piezas (ej. ...-Arcoíris-3d-grande-Esteban.stl)
+        const quien = [...new Set(grupo.map(u => u.it.nombre))].join('-');
+        geo.descargar(blob, `${nombre}-${quien}`.replace(/[^\w\-áéíóúñÁÉÍÓÚÑü]+/g, '_') + '.stl');
         n++;
       }
       return n;
