@@ -1,6 +1,6 @@
 // Panel de Lu: resumen (vendido por semana y mes, entregas, merma y funnel), pedidos, tandas y filamento.
-import { COLORES, ESTADOS, colorDe, formaDe, nombrePieza, ornSVG, esc } from './catalog.js';
-import { lugaresDe, tipoDe, confTipo, gramosDe, tamano, medidaDe } from './pricing.js';
+import { COLORES, ESTADOS, FORMAS, CATEGORIAS, LETRAS, ADORNOS, PAGOS, MAX_LETRAS, colorDe, formaDe, es3dForma, nombrePieza, ornSVG, esc } from './catalog.js';
+import { lugaresDe, tipoDe, confTipo, gramosDe, tamano, medidaDe, cotizar } from './pricing.js';
 import { correoRecordado } from './store.js';
 import { CONFIG } from './config.js';
 
@@ -17,6 +17,7 @@ const entregadoDe = o => o.status === 'Entregado' ? (fechaDe(o, 'Entregado') || 
 function llego(o, s) { if (fechaDe(o, s)) return true; if (o.status === 'Cancelado') return s === 'Nuevo'; return ESTADOS.indexOf(o.status) >= ESTADOS.indexOf(s); }
 
 let pestana = 'resumen', periodo = 'mes', filtro = 'activos';
+let editando = null, ed = null; // pedido que se está editando y su copia de trabajo
 let quitarAviso = null;
 
 /* ----- Festejo cuando llega un pedido ----- */
@@ -194,7 +195,7 @@ export async function vPanel(ctx) {
     box.innerHTML = `
       <div class="chips"><button class="chip" data-fi="activos" aria-pressed="${filtro === 'activos'}">Activos</button><button class="chip" data-fi="todos" aria-pressed="${filtro === 'todos'}">Todos</button></div>
       ${lista.length ? '' : '<p class="hint">No hay pedidos aquí todavía.</p>'}
-      ${lista.map(o => `
+      ${lista.map(o => o.id === editando ? formaEdicion(o) : `
         <div class="card ord" data-id="${o.id}">
           <div class="ordhead"><div><b>${esc(o.code)} · ${esc(o.adult_name)}</b><small>${corta(creado(o))} · ${esc(o.phone)} · ${esc(o.payment || '')}</small></div><span class="st ${o.status}">${o.status}</span></div>
           <div class="dlist">${(o.items || []).map((it, idx) => { const m = lugaresDe(it); return `
@@ -207,12 +208,20 @@ export async function vPanel(ctx) {
           </div>
           ${o.payment === 'Mercado Pago' ? `<label class="f">Liga de pago de Mercado Pago<input class="field" data-k="pay_link" placeholder="https://mpago.la/..." value="${esc(o.pay_link || '')}"></label>` : ''}
           <label class="f">Notas<input class="field" data-k="notes" maxlength="200" value="${esc(o.notes || '')}"></label>
-          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-stl>⬇ Bajar todo el pedido</button><button class="linkbtn" data-del style="margin-left:auto">Borrar pedido</button></div>
+          <div class="row"><button class="btn small" data-save>Guardar</button><button class="btn small soft" data-edit>✏️ Editar pedido</button><button class="btn small soft" data-stl>⬇ Bajar todo el pedido</button><button class="linkbtn" data-del style="margin-left:auto">Borrar pedido</button></div>
         </div>`).join('')}
       ${lista.length ? '<p class="hint">Si un pedido real no se hizo, mejor cámbialo a "Cancelado": así cuenta en tu funnel. "Borrar pedido" es para pruebas o errores y no se puede deshacer.</p>' : ''}`;
     box.querySelectorAll('[data-fi]').forEach(b => b.onclick = () => { filtro = b.dataset.fi; pinta(); });
-    box.querySelectorAll('.ord').forEach(card => {
+    const cardEd = box.querySelector('.ord-ed');
+    if (cardEd) conectaEdicion(cardEd, pedidos.find(x => x.id === editando));
+    box.querySelectorAll('.ord:not(.ord-ed)').forEach(card => {
       const o = pedidos.find(x => x.id === card.dataset.id);
+      card.querySelector('[data-edit]').onclick = () => {
+        editando = o.id;
+        ed = { adult_name: o.adult_name || '', phone: o.phone || '', payment: o.payment || PAGOS[0], items: (o.items || []).map((it, i) => ({ ...it, _orig: i })), total: +o.total || 0, manual: false };
+        pinta();
+        box.querySelector('.ord-ed')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      };
       card.querySelector('[data-save]').onclick = async () => {
         const v = k => card.querySelector(`[data-k="${k}"]`);
         const status = v('status').value;
@@ -231,6 +240,99 @@ export async function vPanel(ctx) {
         catch (e) { del.disabled = false; toast('No se borró: ' + e.message); }
       };
     });
+  }
+
+  /* ----- Editar un pedido (errores del cliente o cambios de opinión) ----- */
+  const DISENO = ['forma', 'color', 'nombre', 'letra', 'adorno', 'tam'];
+  const opciones = (lista, actual) => lista.map(([v, t]) => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const calcTotal = () => cotizar(ed.items, ajustes.precios).total;
+  function formaEdicion(o) {
+    if (!ed.manual) ed.total = calcTotal();
+    const avanzado = ['Pagado', 'Imprimiendo', 'Listo', 'Entregado'].includes(o.status);
+    return `
+      <div class="card ord ord-ed" data-id="${o.id}">
+        <div class="ordhead"><div><b>✏️ Editando ${esc(o.code)}</b><small>Los cambios se guardan hasta que toques "Guardar cambios"</small></div><span class="st ${o.status}">${o.status}</span></div>
+        ${avanzado ? '<p class="warn">Este pedido ya está ' + o.status.toLowerCase() + '. Si cambias un diseño que ya se imprimió, se vuelve a imprimir; y si cambia el total, avísale al cliente.</p>' : ''}
+        ${ed.items.map((it, i) => { const d3 = es3dForma(it.forma); return `
+          <div class="edrow" data-i="${i}">
+            <div class="edtop">${ornSVG(it, 48)}<b>${esc(nombrePieza(it.forma, it.color))}${d3 ? ' · ' + tamano(it) : ''}</b><button class="linkbtn" data-quitar>Quitar</button></div>
+            <div class="grid2">
+              <label class="f">Figura<select class="field" data-e="forma">${CATEGORIAS.map(c => `<optgroup label="${esc(c.nombre)}">${opciones(FORMAS.filter(f => f.cat === c.id).map(f => [f.id, f.nombre]), it.forma)}</optgroup>`).join('')}</select></label>
+              <label class="f">Color<select class="field" data-e="color">${opciones(COLORES.map(c => [c.id, c.nombre]), it.color)}</select></label>
+              <label class="f">Nombre<input class="field" data-e="nombre" maxlength="${MAX_LETRAS}" value="${esc(it.nombre || '')}"></label>
+              <label class="f">Letra<select class="field" data-e="letra">${opciones(LETRAS.map(l => [l.id, l.nombre]), it.letra || 'elegante')}</select></label>
+              ${d3 ? `<label class="f">Tamaño<select class="field" data-e="tam">${opciones([['grande', 'Grande'], ['chica', 'Chica']], tamano(it))}</select></label>`
+                   : `<label class="f">Adorno<select class="field" data-e="adorno">${opciones(ADORNOS.map(a => [a.id, a.nombre]), it.adorno || 'lisa')}</select></label>`}
+              <label class="f">Cantidad<input class="field" type="number" min="1" max="20" inputmode="numeric" data-e="cant" value="${it.cant}"></label>
+            </div>
+          </div>`; }).join('')}
+        ${ed.items.length ? '' : '<p class="warn">El pedido se quedó sin piezas. Si el cliente ya no lo quiere, usa "Cancelar pedido".</p>'}
+        <button class="btn small soft" data-agregar>+ Agregar otra pieza</button>
+        <div class="grid2">
+          <label class="f">Mamá o papá<input class="field" data-d="adult_name" maxlength="60" value="${esc(ed.adult_name)}"></label>
+          <label class="f">Teléfono<input class="field" data-d="phone" maxlength="20" inputmode="tel" value="${esc(ed.phone)}"></label>
+          <label class="f">Forma de pago<select class="field" data-d="payment">${opciones(PAGOS.map(x => [x, x]), ed.payment)}</select></label>
+          <label class="f">Total a cobrar ($)<input class="field" type="number" min="0" inputmode="numeric" data-total value="${ed.total}"></label>
+        </div>
+        <p class="hint">Con los precios de la lista: <b>${fmt(calcTotal())}</b> (antes ${fmt(o.total)}).${ed.manual ? ' <button class="linkbtn" data-usar-lista>Usar el de la lista</button>' : ''}</p>
+        <div class="row"><button class="btn small" data-guardar-ed>Guardar cambios</button><button class="btn small soft" data-cancelar-ed>No guardar</button><button class="linkbtn" data-cancelar-pedido style="margin-left:auto">Cancelar pedido</button></div>
+      </div>`;
+  }
+  function conectaEdicion(card, o) {
+    const repinta = () => { const y = scrollY; pinta(); scrollTo(0, y); };
+    card.querySelectorAll('.edrow').forEach(row => {
+      const it = ed.items[+row.dataset.i];
+      row.querySelectorAll('[data-e]').forEach(el => {
+        const k = el.dataset.e;
+        if (k === 'nombre') { el.oninput = () => { it.nombre = el.value; }; el.onchange = repinta; return; }
+        el.onchange = () => {
+          if (k === 'cant') it.cant = Math.max(1, Math.min(20, Math.round(+el.value || 1)));
+          else it[k] = el.value;
+          if (k === 'forma') { if (es3dForma(it.forma)) { it.tam = it.tam || 'grande'; } else { delete it.tam; it.adorno = it.adorno || 'perlitas'; } }
+          repinta();
+        };
+      });
+      row.querySelector('[data-quitar]').onclick = () => { ed.items.splice(+row.dataset.i, 1); repinta(); };
+    });
+    card.querySelector('[data-agregar]').onclick = () => {
+      const base = ed.items[ed.items.length - 1] || { forma: 'plana', color: 'rojo', letra: 'elegante', adorno: 'perlitas' };
+      const { _orig, impresas, ...copia } = base;
+      ed.items.push({ ...copia, nombre: '', cant: 1 }); repinta();
+    };
+    card.querySelectorAll('[data-d]').forEach(el => { el.oninput = el.onchange = () => { ed[el.dataset.d] = el.value; }; });
+    const tot = card.querySelector('[data-total]');
+    tot.oninput = () => { ed.total = Math.max(0, Math.round(+tot.value || 0)); ed.manual = true; };
+    tot.onchange = repinta;
+    card.querySelector('[data-usar-lista]')?.addEventListener('click', () => { ed.manual = false; repinta(); });
+    card.querySelector('[data-cancelar-ed]').onclick = () => { editando = null; ed = null; pinta(); };
+    const cp = card.querySelector('[data-cancelar-pedido]'); let armado = false, t = 0;
+    cp.onclick = async () => {
+      if (!armado) { armado = true; cp.textContent = `¿Seguro? Toca otra vez para cancelar ${o.code}`; t = setTimeout(() => { armado = false; cp.textContent = 'Cancelar pedido'; }, 4000); return; }
+      clearTimeout(t); cp.disabled = true;
+      try {
+        await store.updateOrder(o.id, { status: 'Cancelado', status_dates: { ...(o.status_dates || {}), Cancelado: (o.status_dates || {}).Cancelado || hoy() }, notes: `${o.notes ? o.notes + ' ' : ''}Cancelado ${corta(hoy())}.`.slice(0, 200) });
+        editando = null; ed = null; toast(`Pedido ${o.code} cancelado`); await recarga();
+      } catch (e) { cp.disabled = false; toast('No se canceló: ' + e.message); }
+    };
+    card.querySelector('[data-guardar-ed]').onclick = async e => {
+      if (!ed.items.length) { toast('El pedido necesita al menos una pieza (o cancélalo)'); return; }
+      const sinNombre = ed.items.findIndex(it => !(it.nombre || '').trim());
+      if (sinNombre >= 0) { toast(`Falta el nombre de la pieza ${sinNombre + 1}`); card.querySelectorAll('[data-e="nombre"]')[sinNombre]?.focus(); return; }
+      if (ed.adult_name.trim().length < 2) { toast('Falta el nombre de mamá o papá'); return; }
+      // Si cambió el diseño, la pieza se vuelve a imprimir; si solo cambió la cantidad, se respeta lo impreso
+      const items = ed.items.map(({ _orig, ...it }) => {
+        const antes = _orig != null ? o.items[_orig] : null;
+        const igual = antes && DISENO.every(k => (antes[k] ?? '') === (it[k] ?? ''));
+        return { ...it, nombre: it.nombre.trim(), impresas: igual ? Math.min(it.cant, antes.impresas || 0) : 0 };
+      });
+      const total = ed.manual ? ed.total : calcTotal();
+      const notes = `${o.notes ? o.notes + ' ' : ''}Editado ${corta(hoy())}${total !== +o.total ? ` (antes ${fmt(o.total)})` : ''}.`.slice(-200);
+      e.target.disabled = true;
+      try {
+        await store.updateOrder(o.id, { items, total, adult_name: ed.adult_name.trim(), phone: ed.phone.trim(), payment: ed.payment, notes });
+        editando = null; ed = null; toast('Pedido actualizado'); await recarga();
+      } catch (err) { e.target.disabled = false; toast('No se guardó: ' + err.message); }
+    };
   }
 
   /* ----- Tandas ----- */

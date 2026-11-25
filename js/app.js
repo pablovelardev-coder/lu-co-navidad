@@ -338,6 +338,7 @@ async function vSeguimiento(code) {
     <div class="timeline">${PASOS_CLIENTE.map(([s, t, d], i) => `<div class="tl ${i < idx ? 'done' : i === idx ? 'now' : ''}"><i>${i < idx ? '✓' : ''}</i><div><b>${t}</b><small>${fecha(o.status_dates && o.status_dates[s]) || (i === idx ? d : '')}</small></div></div>`).join('')}</div>`}
     ${pago}
     <div style="display:grid;gap:8px">${(o.items || []).map(it => `<div class="item">${ornSVG(it, 52)}<div class="nm">${nombreItem(it)}<small>${detalleItem(it)}</small></div><b>×${it.cant}</b></div>`).join('')}</div>
+    ${['Nuevo', 'Aceptado'].includes(o.status) ? '<p class="hint" style="text-align:center">¿Te equivocaste o quieres cambiar algo (nombre, color, letra o tamaño)? Avísale a Luciana y ella lo corrige.</p>' : ''}
     <div class="card">¡Gracias por tu pedido! Cada esfera la hacemos en casa con mucho cariño.<span class="sig" style="display:block">Lu</span></div>`;
 }
 

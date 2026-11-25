@@ -206,3 +206,9 @@ label.f{display:grid;gap:6px;font-weight:800;font-size:.9rem}
 .fiesta-card p{margin:0}
 .fiesta-ico{font-size:3rem;line-height:1}
 @keyframes salta{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* Editar pedido */
+.ord-ed{border:2px solid var(--dorado)}
+.edrow{background:var(--perla);border:1px solid var(--linea);border-radius:14px;padding:8px;display:grid;gap:8px}
+.edtop{display:flex;align-items:center;gap:8px}
+.edtop .linkbtn{margin-left:auto}
