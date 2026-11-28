@@ -81,7 +81,7 @@ function camino() {
 
 /* ---------- inicio ---------- */
 const MUESTRA = { plana: ['rojo', 'Ana'], estrella: ['amarillo', 'Leo'], corazon: ['morado', 'Mía'], arbol: ['verde', 'Pau'],
-  esfera3d: ['azul', 'Sofi'], estrella3d: ['amarillo', 'Lu'], corazon3d: ['rojo', 'Mía'], arbol3d: ['verde', 'Pau'], muneco: ['blanco', 'Leo'], bota: ['rojo', 'Ana'], gorro: ['rojo', 'Lu'] };
+  esfera3d: ['azul', 'Sofi'], estrella3d: ['amarillo', 'Lu'], corazon3d: ['rojo', 'Mía'], arbol3d: ['verde', 'Pau'], muneco: ['blanco', 'Leo'], bota: ['rojo', 'Ana'], gorro: ['rojo', 'Lu'], hueso: ['amarillo', 'Ringo'], casita: ['rojo', 'Abuelos'], galleta: ['naranja', 'Lu'] };
 let catInicio = venta3d() ? '3d' : 'nombre';
 const categoriasOrden = () => (venta3d() ? [...CATEGORIAS].sort((a, b) => (b.id === '3d') - (a.id === '3d')) : CATEGORIAS);
 function vInicio() {

@@ -145,6 +145,13 @@ function lugaresAdorno(pf, cajaTexto) {
 // El abombado se arma con capas encogidas (como lo imprime la impresora, capa por capa).
 const BASE_3D = 1.2, DOMO = 3.6, R_DOMO = 3.5, CAPAS = 12, ALTO_LETRA_3D = 1.0, ALTO_DETALLE_3D = 0.8;
 const rect = (x0, y0, x1, y1) => [V(x0, y0), V(x1, y0), V(x1, y1), V(x0, y1)];
+// Cápsula (rectángulo con puntas redondas) de (x0,y0) a (x1,y1), radio r
+function capsula(x0, y0, x1, y1, r, n = 14) {
+  const a = Math.atan2(y1 - y0, x1 - x0), pts = [];
+  for (let i = 0; i <= n; i++) { const t = a + Math.PI / 2 + Math.PI * i / n; pts.push(V(x0 + r * Math.cos(t), y0 + r * Math.sin(t))); }
+  for (let i = 0; i <= n; i++) { const t = a - Math.PI / 2 + Math.PI * i / n; pts.push(V(x1 + r * Math.cos(t), y1 + r * Math.sin(t))); }
+  return pts;
+}
 const PINO = [[0, 29], [26.5, -23], [5, -23], [5, -26.5], [-5, -26.5], [-5, -23], [-26.5, -23]].map(([x, y]) => V(x, y));
 // Medidas en mm para 55 mm. texto = zona plana de arriba donde va el nombre.
 const SILUETAS_3D = {
@@ -174,6 +181,57 @@ const SILUETAS_3D = {
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
     const mv = v => V(v.x - cx, v.y - cy), t = mv(rot(V(2, -14)));
     return { partes: [pts.map(mv)], hoyo: mv(rot(V(-5, 22))), texto: { x: t.x, y: t.y, w: 18, h: 8 } };
+  },
+  // Figuras nuevas (28-nov, para el pinito familiar): hueso (Ringo), casita y galleta de jengibre.
+  // Hueso: el nombre va a lo largo; argollita arriba al centro para que cuelgue derecho.
+  hueso: () => ({
+    partes: [rect(-18, -7.5, 18, 7.5), circulo(-20, 7, 9, 48), circulo(20, 7, 9, 48), circulo(-20, -7, 9, 48), circulo(20, -7, 9, 48), circulo(0, 11.5, 4.5, 32), rect(-3, 6, 3, 12)],
+    hoyo: V(0, 11.5), texto: { y: -1.5, w: 30, h: 7.5 }, textoG: { y: -1.5, w: 34, h: 9.5 },
+  }),
+  // Casona de ladrillo (28-nov, v3 según la foto de la casa real): bloque principal de 2 pisos con techo
+  // a cuatro aguas y 2 buhardillas, ala más baja a la izquierda, ventanas con postigos y la entrada al centro
+  // con su arco blanco. El nombre va entre los pisos del bloque principal.
+  casita: () => {
+    const dx = 4, mv = pts => pts.map(v => V(v.x + dx, v.y));
+    const R = (x0, y0, x1, y1) => mv(rect(x0, y0, x1, y1)), P = pts => mv(pts.map(([x, y]) => V(x, y)));
+    const marco = (x0, y0, x1, y1, g = 0.8) => [R(x0, y0, x1, y0 + g), R(x0, y1 - g, x1, y1), R(x0, y0, x0 + g, y1), R(x1 - g, y0, x1, y1)];
+    // ventana: marco; el parteluz del centro va en 'extras' (pieza aparte encima del marco)
+    const ventana = (x, y0, y1, w = 4.6) => marco(x - w / 2, y0, x + w / 2, y1);
+    const parteluz = (x, y0, y1) => R(x - 0.35, y0 + 0.4, x + 0.35, y1 - 0.4);
+    const arco = (cx, cy, r, n = 12) => P(Array.from({ length: n + 1 }, (_, i) => [cx + r * Math.cos(Math.PI * i / n), cy + r * Math.sin(Math.PI * i / n)]));
+    const detalles = [
+      ...[-14.5, -6.5, 6.5, 14.5].flatMap(x => ventana(x, -1, 4)), ...marco(-1.4, -1, 1.4, 4),         // piso de arriba
+      ...[-14.5, -7.5, 7.5, 14.5].flatMap(x => ventana(x, -15.5, -11)),                               // piso de abajo
+      R(-2, -19.5, 2, -14.2), arco(0, -14.2, 3),                                                        // puerta y arco de la entrada
+    ];
+    return {
+      partes: [R(-21, -20, 21, 6), P([[-23.5, 5], [23.5, 5], [15, 15], [-15, 15]]),                   // bloque y techo
+        R(-30.5, -20, -21, 0), P([[-31.5, -1], [-21, -1], [-21, 4.5], [-29.5, 4.5]]),                 // ala y su techo (pegado a la pared)
+        ...[-7.5, 7.5].flatMap(x => [R(x - 3, 9, x + 3, 15.5), P([[x - 4, 15.2], [x + 4, 15.2], [x, 19]])])], // buhardillas
+      hoyo: V(dx, 9), texto: { x: dx, y: -6.8, w: 28, h: 4.6 }, detalles,
+      extras: [...[-14.5, -6.5, 6.5, 14.5].map(x => parteluz(x, -1, 4)), ...[-14.5, -7.5, 7.5, 14.5].map(x => parteluz(x, -15.5, -11))],
+    };
+  },
+  // Galleta de jengibre decorada (28-nov): cabeza grande, cejas, sonrisa, dos botones de gomita,
+  // una mano levantada saludando y glaseado en zigzag en muñecas y tobillos. El nombre va en la panza.
+  galleta: () => {
+    const arco = (cx, cy, r, a0, a1, n = 10) => Array.from({ length: n + 1 }, (_, i) => { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; return V(cx + r * Math.cos(a), cy + r * Math.sin(a)); });
+    const media = (cx, cy, r0, r1, a0, a1) => [...arco(cx, cy, r1, a0, a1), ...arco(cx, cy, r0, a1, a0)];
+    // zigzag de glaseado atravesando una extremidad: P centro, u a lo largo, mitad = medio ancho
+    const zigzag = (P, u, mitad, amp = 0.9, pasos = 5) => {
+      const n = V(-u.y, u.x), pts = Array.from({ length: pasos + 1 }, (_, i) => { const t = -mitad + 2 * mitad * i / pasos, a = i % 2 ? amp : -amp; return V(P.x + n.x * t + u.x * a, P.y + n.y * t + u.y * a); });
+      return pts.slice(1).map((q, i) => capsula(pts[i].x, pts[i].y, q.x, q.y, 0.45, 6));
+    };
+    const ext = (x0, y0, x1, y1, t) => { const L = Math.hypot(x1 - x0, y1 - y0); return { P: V(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t), u: V((x1 - x0) / L, (y1 - y0) / L) }; };
+    // un brazo abajo, el otro levantado saludando (Pablo, 28-nov), piernitas cortas y gorditas
+    const limbs = [[-6, -1, -20, -4, 5.5], [6, 1, 20, 12, 5.5], [-5, -12, -9, -20, 6.5], [5, -12, 9, -20, 6.5]];
+    const glaseado = limbs.flatMap(([x0, y0, x1, y1, r]) => { const e = ext(x0, y0, x1, y1, 0.8); return zigzag(e.P, e.u, r - 1.6); });
+    return {
+      partes: [circulo(0, 15, 12, 64), rect(-5, 1, 5, 6), circulo(0, -5, 12, 64), ...limbs.map(([x0, y0, x1, y1, r]) => capsula(x0, y0, x1, y1, r))],
+      hoyo: V(0, 23.5), texto: { y: -8.5, w: 21, h: 6.5 },
+      detalles: [circulo(-4, 16.5, 1.5, 16), circulo(4, 16.5, 1.5, 16), media(-4, 17.2, 2.9, 3.8, 55, 125), media(4, 17.2, 2.9, 3.8, 55, 125),
+        media(0, 14.5, 3.2, 4.4, 205, 335), circulo(0, 1.5, 1.6, 18), circulo(0, -2.6, 1.6, 18), ...glaseado],
+    };
   },
   // Gorro con curvas (17-nov, "menos cuadrado"): copa abombada que se dobla a la derecha,
   // punta caída con pompón y ala redondeada. La punta es ancha para no romperse.
@@ -272,7 +330,7 @@ async function nombreFormas(d, sil, k) {
 // op = { tam: 'chica' | 'grande' | mm, texto: {x, y, w, h} en mm de 55 para cambiar la zona del nombre }
 export const GRANDE_MM = 115;
 // Las redondas y llenas gastan el doble a la misma medida: su grande es de 9.5 cm (Pablo, 17-nov)
-export const GRANDE_MM_FORMA = { esfera3d: 95, corazon3d: 95, gorro: 95 };
+export const GRANDE_MM_FORMA = { esfera3d: 95, corazon3d: 95, gorro: 95, casita: 95 };
 export const tamanoDe = it => (it && it.tam === 'chica' ? 'chica' : 'grande');
 function mmDe(sil, tam) {
   if (typeof tam === 'number') return tam;
@@ -338,7 +396,18 @@ async function construir3dUna(d, op = {}) {
     grupo.add(new THREE.Mesh(extruir(nom.formas, ALTO_LETRA_3D, arriba - 0.1, nom.cx - nom.gx, nom.cy + nom.gy)));
     if (nom.alto < LETRA_CHICA * k * 0.85) avisos.push('El nombre queda chiquito para esta figura. Prueben uno más corto.');
   }
-  if (sil.detalles) grupo.add(new THREE.Mesh(extruir(sil.detalles.map(p => forma(p.map(v => V(v.x * k, v.y * k)))), ALTO_DETALLE_3D, arriba - 0.1)));
+  // Detalles (ventanas, ojos, glaseado): se unen y se recortan a la parte plana de arriba,
+  // para que nunca queden flotando sobre la orilla abombada; también se les quita el hoyo.
+  // 'extras' son detalles que van como pieza aparte encima (p. ej. el parteluz que cruza un marco).
+  for (const lista of [sil.detalles, sil.extras]) if (lista) {
+    const PF = C.PolyFillType.pftNonZero, det = new C.Paths(), meseta = new C.Paths(), dentro = new C.Paths();
+    let c = new C.Clipper(); c.AddPaths(lista.map(p => aC(ccw(p))), C.PolyType.ptSubject, true); c.Execute(C.ClipType.ctUnion, det, PF, PF);
+    const o = new C.ClipperOffset(2, 0.02 * S); o.AddPaths(silueta, C.JoinType.jtRound, C.EndType.etClosedPolygon); o.Execute(meseta, -(R_DOMO_1 + 0.3) * S);
+    c = new C.Clipper(); c.AddPaths(det, C.PolyType.ptSubject, true); c.AddPaths(meseta, C.PolyType.ptClip, true); c.Execute(C.ClipType.ctIntersection, dentro, PF, PF);
+    const t = new C.PolyTree(); c = new C.Clipper(); c.AddPaths(dentro, C.PolyType.ptSubject, true); c.AddPath(hoyo, C.PolyType.ptClip, true); c.Execute(C.ClipType.ctDifference, t, PF, PF);
+    const fs = C.JS.PolyTreeToExPolygons(t).map(e => ({ outer: limpio(e.outer), holes: e.holes.map(limpio).filter(grande) })).filter(e => grande(e.outer)).map(e => forma(desdeC(e.outer), e.holes.map(desdeC)));
+    if (fs.length) grupo.add(new THREE.Mesh(extruir(fs, ALTO_DETALLE_3D, arriba - 0.1)));
+  }
   return { grupo, hoyo: V(sil.hoyo.x * k, sil.hoyo.y * k), avisos, huella: silueta.map(p => p.map(q => ({ X: q.X, Y: q.Y }))), alto: arriba + ALTO_LETRA_3D };
 }
 // Acomoda 2 piezas de una sola pieza en la charola de 120 × 120 (lado a lado, una arriba de otra o en diagonal).

@@ -19,7 +19,7 @@ export const PRECIOS_BASE = {
 };
 // Gramos por figura grande: la estrella de 11.5 cm pesó 20 g (17-nov) = 0.50 g por cm³ de volumen;
 // las demás se calculan con su volumen. Solo la estrella está pesada.
-export const GRAMOS_GRANDE = { estrella3d: 20, muneco: 20, bota: 18, arbol3d: 25, corazon3d: 25, gorro: 26, esfera3d: 28 }; // redondas a 9.5 cm
+export const GRAMOS_GRANDE = { estrella3d: 20, muneco: 20, bota: 18, arbol3d: 25, corazon3d: 25, gorro: 26, esfera3d: 28, hueso: 21, casita: 20, galleta: 28 }; // redondas a 9.5 cm
 const GR_ROLLO = 200;
 
 export const costoVariable = p => p.rollo / GR_ROLLO * p.gramos + p.otros;
@@ -32,7 +32,7 @@ export function precioUnitario(n, p) {
 
 // Adornos 3D de una pieza, en dos tamaños. Cada pieza ocupa su lugar en la charola:
 // planas 4 por charola, 3D chica 2 y 3D grande 1. Sin tamaño guardado = grande.
-const FORMAS_3D = ['esfera3d', 'estrella3d', 'corazon3d', 'arbol3d', 'muneco', 'bota', 'gorro'];
+const FORMAS_3D = ['esfera3d', 'estrella3d', 'corazon3d', 'arbol3d', 'muneco', 'bota', 'gorro', 'hueso', 'casita', 'galleta'];
 export const es3d = item => FORMAS_3D.includes(item.forma);
 export const tamano = item => (item.tam === 'chica' ? 'chica' : 'grande');
 export const tipoDe = item => (es3d(item) ? '3d-' + tamano(item) : 'plana'); // 'plana' | '3d-chica' | '3d-grande'
@@ -41,7 +41,7 @@ export const lugaresDe = () => 1;
 export const gramosDe = (item, p) => tipoDe(item) === '3d-grande' ? (GRAMOS_GRANDE[item.forma] || p.gramos3dG) : confTipo(tipoDe(item), p).gramos;
 export const MEDIDA = { 'chica': '6.6 cm', 'grande': '9.5 a 11.5 cm' };
 // La grande de las redondas (esfera, corazón, gorro) es de 9.5 cm; las demás de 11.5 cm
-const GRANDE_CM = { esfera3d: '9.5 cm', corazon3d: '9.5 cm', gorro: '9.5 cm' };
+const GRANDE_CM = { esfera3d: '9.5 cm', corazon3d: '9.5 cm', gorro: '9.5 cm', casita: '9.5 cm' };
 export const medidaDe = item => (tamano(item) === 'chica' ? MEDIDA.chica : GRANDE_CM[item.forma] || '11.5 cm');
 
 // La misma regla de tandas aplicada a cada tipo
